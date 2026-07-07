@@ -3,15 +3,25 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Tag, ChevronRight, X, MapPin, Clock, CreditCard } from 'lucide-react-native';
+import { ArrowLeft, CreditCard, Smartphone, Check, Tag, X } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 
+function formatTime(iso) {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function formatDate(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
 function generateOrderId() {
   const now = new Date();
-  const d = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
-  const seq = String(Math.floor(Math.random() * 900) + 100);
-  return `ORD-${d}-${seq}`;
+  const date = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+  const seq = String(Math.floor(100 + Math.random() * 900));
+  return `ORD-${date}-${seq}`;
 }
 
 function calcCouponDiscount(coupon, subtotal) {
@@ -21,46 +31,46 @@ function calcCouponDiscount(coupon, subtotal) {
 }
 
 const PAYMENT_METHODS = [
-  { key: 'card', label: '신용/체크카드', Icon: CreditCard },
-  { key: 'kakao', label: '카카오페이', Icon: null },
-  { key: 'naver', label: '네이버페이', Icon: null },
-  { key: 'toss', label: '토스페이', Icon: null },
+  { id: 'card',     label: '신용/체크카드', Icon: CreditCard },
+  { id: 'kakaopay', label: '카카오페이',   Icon: Smartphone },
+  { id: 'naverpay', label: '네이버페이',   Icon: Smartphone },
+  { id: 'tosspay',  label: '토스페이',     Icon: Smartphone },
 ];
 
-export default function OrderScreen({ route, navigation }) {
+const CONFIRMS = [
+  '소비기한 임박 상품임을 확인했습니다.',
+  '지정된 픽업 시간 내 방문해야 함을 확인했습니다.',
+  '픽업 후 단순 변심 환불이 제한될 수 있음을 확인했습니다.',
+];
+
+export default function OrderScreen({ navigation, route }) {
   const { productId, qty } = route.params;
   const { productList, coupons, handleOrderComplete } = useApp();
   const product = productList.find(p => p.id === productId);
 
+  const [payMethod, setPayMethod] = useState('card');
+  const [checked, setChecked] = useState([false, false, false]);
   const [selectedCoupon, setSelectedCoupon] = useState(null);
   const [showCouponSheet, setShowCouponSheet] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('card');
-  const [checks, setChecks] = useState([false, false, false]);
 
   if (!product) return null;
 
+  const allChecked = checked.every(Boolean);
   const subtotal = product.salePrice * qty;
-  const originalTotal = product.originalPrice * qty;
-  const productDiscount = originalTotal - subtotal;
   const couponDiscount = calcCouponDiscount(selectedCoupon, subtotal);
   const finalPrice = subtotal - couponDiscount;
+  const availableCoupons = coupons.filter(c => subtotal >= c.minOrderAmount);
 
-  const allChecked = checks.every(Boolean);
-
-  function formatTime(iso) {
-    const d = new Date(iso);
-    return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+  function toggleCheck(i) {
+    setChecked(prev => prev.map((v, idx) => idx === i ? !v : v));
   }
 
   function handlePay() {
     if (!allChecked) return;
-    const now = new Date();
     const order = {
       id: generateOrderId(),
-      productId: product.id,
       productName: product.name,
       store: product.store,
-      storeId: product.storeId,
       storeAddress: product.pickupAddress,
       pickupTime: `오늘 ${formatTime(product.pickupStart)}~${formatTime(product.pickupEnd)}`,
       quantity: qty,
@@ -68,14 +78,11 @@ export default function OrderScreen({ route, navigation }) {
       discountedPrice: finalPrice,
       couponName: selectedCoupon?.name || null,
       status: 'pickupReady',
-      orderedAt: now.toISOString(),
+      orderedAt: new Date().toISOString(),
     };
     handleOrderComplete(order);
     navigation.replace('OrderComplete', { order });
   }
-
-  const availableCoupons = coupons.filter(c => subtotal >= c.minOrderAmount);
-  const unavailableCoupons = coupons.filter(c => subtotal < c.minOrderAmount);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -86,142 +93,205 @@ export default function OrderScreen({ route, navigation }) {
         <Text style={styles.headerTitle}>주문/결제</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+
+        {/* 주문 상품 */}
+        <View style={styles.card}>
+          <Text style={styles.sectionLabel}>주문 상품</Text>
+          <View style={styles.productRow}>
+            <View style={styles.productThumb}>
+              <Text style={styles.productEmoji}>{product.emoji || '🍱'}</Text>
+            </View>
+            <View style={styles.productInfo}>
+              <Text style={styles.productName}>{product.name}</Text>
+              <Text style={styles.productStore}>{product.store}</Text>
+              <Text style={styles.productPrice}>
+                {product.salePrice.toLocaleString()}원 × {qty}개
+              </Text>
+            </View>
+          </View>
+        </View>
+
         {/* 픽업 정보 */}
         <View style={styles.card}>
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>픽업 매장</Text>
-            <Text style={styles.value}>{product.store}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>픽업 가능 시간</Text>
-            <Text style={styles.value}>{formatTime(product.pickupStart)} ~ {formatTime(product.pickupEnd)}</Text>
-          </View>
-          <View style={[styles.infoRow, { marginBottom: 0 }]}>
-            <Text style={styles.label}>픽업 장소</Text>
-            <Text style={[styles.value, { color: colors.mediumGray, fontSize: 12 }]}>{product.pickupAddress}</Text>
+          <Text style={styles.sectionLabel}>픽업 정보</Text>
+          {[
+            { label: '픽업 매장', value: product.store },
+            { label: '픽업 가능 시간', value: `${formatTime(product.pickupStart)} ~ ${formatTime(product.pickupEnd)}` },
+            { label: '소비기한', value: formatDate(product.expiryDate) },
+          ].map((item, idx) => (
+            <View key={item.label} style={[styles.infoRow, idx < 2 && styles.infoRowBorder]}>
+              <Text style={styles.infoLabel}>{item.label}</Text>
+              <Text style={styles.infoValue}>{item.value}</Text>
+            </View>
+          ))}
+          <View style={{ marginTop: 14 }}>
+            <Text style={styles.pickupPlaceLabel}>픽업 장소</Text>
+            <View style={styles.pickupCard}>
+              <Text style={{ fontSize: 18 }}>📍</Text>
+              <Text style={styles.pickupAddress}>{product.pickupAddress}</Text>
+            </View>
           </View>
         </View>
 
         {/* 쿠폰 */}
-        <TouchableOpacity style={styles.couponRow} onPress={() => setShowCouponSheet(true)}>
-          <Tag size={16} color={colors.primaryGreen} />
-          <Text style={styles.couponLabel}>
-            {selectedCoupon ? selectedCoupon.name : `쿠폰  ${availableCoupons.length}장 사용 가능`}
-          </Text>
-          <ChevronRight size={16} color={colors.mediumGray} />
-        </TouchableOpacity>
+        <View style={styles.card}>
+          <View style={styles.couponRow}>
+            <View style={styles.couponLeft}>
+              <Tag size={16} color={colors.primaryGreen} />
+              <Text style={[styles.sectionLabel, { marginBottom: 0, marginLeft: 6 }]}>쿠폰</Text>
+              {availableCoupons.length > 0 && !selectedCoupon && (
+                <View style={styles.couponCountBadge}>
+                  <Text style={styles.couponCountText}>{availableCoupons.length}장 사용 가능</Text>
+                </View>
+              )}
+            </View>
+            {!selectedCoupon ? (
+              availableCoupons.length > 0 ? (
+                <TouchableOpacity onPress={() => setShowCouponSheet(true)}>
+                  <Text style={styles.couponSelectBtn}>쿠폰 선택</Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={styles.couponNoneText}>사용 가능한 쿠폰 없음</Text>
+              )
+            ) : (
+              <TouchableOpacity onPress={() => setSelectedCoupon(null)} style={styles.couponRemoveBtn}>
+                <Text style={styles.couponRemoveText}>해제</Text>
+                <X size={14} color={colors.alertRed} />
+              </TouchableOpacity>
+            )}
+          </View>
+          {selectedCoupon && (
+            <View style={styles.selectedCoupon}>
+              <View>
+                <Text style={styles.selectedCouponName}>{selectedCoupon.name}</Text>
+                <Text style={styles.selectedCouponInfo}>
+                  {selectedCoupon.discountType === '정액'
+                    ? `-${selectedCoupon.discountValue.toLocaleString()}원`
+                    : `-${selectedCoupon.discountValue}%`} 할인
+                </Text>
+              </View>
+              <Text style={styles.selectedCouponDiscount}>-{couponDiscount.toLocaleString()}원</Text>
+            </View>
+          )}
+        </View>
 
         {/* 결제 수단 */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>결제 수단</Text>
+          <Text style={styles.sectionLabel}>결제 수단</Text>
           <View style={styles.payGrid}>
-            {PAYMENT_METHODS.map(m => (
-              <TouchableOpacity
-                key={m.key}
-                style={[styles.payBtn, paymentMethod === m.key && styles.payBtnActive]}
-                onPress={() => setPaymentMethod(m.key)}
-              >
-                <Text style={[styles.payLabel, paymentMethod === m.key && styles.payLabelActive]}>{m.label}</Text>
-              </TouchableOpacity>
-            ))}
+            {PAYMENT_METHODS.map(({ id, label, Icon }) => {
+              const active = payMethod === id;
+              return (
+                <TouchableOpacity key={id} onPress={() => setPayMethod(id)}
+                  style={[styles.payBtn, active && styles.payBtnActive]}>
+                  <Icon size={16} color={active ? colors.primaryGreen : colors.mediumGray} />
+                  <Text style={[styles.payLabel, active && styles.payLabelActive]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
         {/* 결제 금액 */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>결제 금액</Text>
+          <Text style={styles.sectionLabel}>결제 금액</Text>
           <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>상품 금액</Text>
-            <Text style={styles.priceValue}>{originalTotal.toLocaleString()}원</Text>
+            <Text style={styles.priceLbl}>상품 금액</Text>
+            <Text style={styles.priceVal}>{(product.originalPrice * qty).toLocaleString()}원</Text>
           </View>
           <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>상품 할인</Text>
-            <Text style={[styles.priceValue, { color: colors.alertRed }]}>-{productDiscount.toLocaleString()}원</Text>
+            <Text style={styles.priceLbl}>상품 할인</Text>
+            <Text style={[styles.priceVal, { color: colors.primaryGreen }]}>
+              -{((product.originalPrice - product.salePrice) * qty).toLocaleString()}원
+            </Text>
           </View>
           {couponDiscount > 0 && (
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>쿠폰 할인</Text>
-              <Text style={[styles.priceValue, { color: colors.alertRed }]}>-{couponDiscount.toLocaleString()}원</Text>
+              <Text style={styles.priceLbl}>쿠폰 할인</Text>
+              <Text style={[styles.priceVal, { color: colors.primaryGreen }]}>
+                -{couponDiscount.toLocaleString()}원
+              </Text>
             </View>
           )}
-          <View style={[styles.priceRow, styles.totalRow]}>
-            <Text style={styles.totalLabel}>최종 결제</Text>
-            <Text style={styles.totalValue}>{finalPrice.toLocaleString()}원</Text>
+          <View style={styles.priceTotalRow}>
+            <Text style={styles.priceTotalLbl}>최종 결제</Text>
+            <Text style={styles.priceTotalVal}>{finalPrice.toLocaleString()}원</Text>
           </View>
         </View>
 
-        {/* 필수 확인 */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>구매 전 필수 확인</Text>
-          {['소비기한 임박 상품임을 확인했습니다.', '지정된 픽업 시간 내 방문해야 함을 확인했습니다.', '픽업 후 단순 변심 환불이 제한될 수 있음을 확인했습니다.'].map((txt, i) => (
-            <TouchableOpacity key={i} style={styles.checkRow} onPress={() => setChecks(prev => prev.map((v, j) => j === i ? !v : v))}>
-              <View style={[styles.checkbox, checks[i] && styles.checkboxChecked]}>
-                {checks[i] && <Text style={styles.checkmark}>✓</Text>}
+        {/* 구매 전 필수 확인 */}
+        <View style={[styles.card, { marginBottom: 0 }]}>
+          <Text style={styles.sectionLabel}>구매 전 필수 확인</Text>
+          {CONFIRMS.map((text, i) => (
+            <TouchableOpacity key={i} onPress={() => toggleCheck(i)}
+              style={[styles.confirmRow, i < 2 && styles.confirmRowBorder]}>
+              <View style={[styles.checkbox, checked[i] && styles.checkboxOn]}>
+                {checked[i] && <Check size={13} color={colors.white} strokeWidth={3} />}
               </View>
-              <Text style={styles.checkText}>{txt}</Text>
+              <Text style={styles.confirmText}>{text}</Text>
             </TouchableOpacity>
           ))}
         </View>
-
-        <View style={{ height: 100 }} />
       </ScrollView>
 
       {/* 결제 버튼 */}
-      <View style={styles.footer}>
+      <SafeAreaView edges={['bottom']} style={styles.bottomBar}>
         <TouchableOpacity
-          style={[styles.payNowBtn, !allChecked && styles.payNowBtnDisabled]}
           onPress={handlePay}
           disabled={!allChecked}
+          style={[styles.payOrderBtn, !allChecked && styles.payOrderBtnOff]}
         >
-          <Text style={styles.payNowText}>{allChecked ? `${finalPrice.toLocaleString()}원 결제하기` : '위 내용을 모두 확인해주세요'}</Text>
+          <Text style={styles.payOrderBtnText}>
+            {allChecked ? `${finalPrice.toLocaleString()}원 결제하기` : '위 내용을 모두 확인해주세요'}
+          </Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
 
       {/* 쿠폰 바텀시트 */}
-      <Modal visible={showCouponSheet} transparent animationType="slide">
-        <TouchableOpacity style={styles.overlay} onPress={() => setShowCouponSheet(false)} />
-        <View style={styles.sheet}>
-          <View style={styles.sheetHandle} />
-          <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>쿠폰 선택</Text>
-            <TouchableOpacity onPress={() => setShowCouponSheet(false)}>
-              <X size={20} color={colors.charcoalBlack} />
-            </TouchableOpacity>
-          </View>
-          {selectedCoupon && (
-            <TouchableOpacity style={styles.removeCoupon} onPress={() => { setSelectedCoupon(null); setShowCouponSheet(false); }}>
-              <Text style={styles.removeCouponText}>쿠폰 사용 안함</Text>
-            </TouchableOpacity>
-          )}
-          {availableCoupons.map(c => (
-            <TouchableOpacity
-              key={c.id}
-              style={[styles.couponItem, selectedCoupon?.id === c.id && styles.couponItemSelected]}
-              onPress={() => { setSelectedCoupon(c); setShowCouponSheet(false); }}
-            >
-              <View style={styles.couponItemLeft}>
-                <Text style={styles.couponItemDiscount}>
-                  {c.discountType === '정액' ? `${c.discountValue.toLocaleString()}원` : `${c.discountValue}%`} 할인
-                </Text>
-                <Text style={styles.couponItemName}>{c.name}</Text>
-                <Text style={styles.couponItemCond}>{c.minOrderAmount.toLocaleString()}원 이상 · ~{c.endDate}</Text>
-              </View>
-              {selectedCoupon?.id === c.id && <Text style={styles.couponCheck}>✓</Text>}
-            </TouchableOpacity>
-          ))}
-          {unavailableCoupons.map(c => (
-            <View key={c.id} style={[styles.couponItem, styles.couponItemUnavail]}>
-              <View style={styles.couponItemLeft}>
-                <Text style={[styles.couponItemDiscount, { color: colors.mediumGray }]}>
-                  {c.discountType === '정액' ? `${c.discountValue.toLocaleString()}원` : `${c.discountValue}%`} 할인
-                </Text>
-                <Text style={[styles.couponItemName, { color: colors.mediumGray }]}>{c.name}</Text>
-                <Text style={styles.couponItemCond}>{c.minOrderAmount.toLocaleString()}원 이상 필요</Text>
-              </View>
+      <Modal visible={showCouponSheet} transparent animationType="slide" onRequestClose={() => setShowCouponSheet(false)}>
+        <TouchableOpacity style={styles.overlay} onPress={() => setShowCouponSheet(false)} activeOpacity={1}>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>쿠폰 선택</Text>
+              <TouchableOpacity onPress={() => setShowCouponSheet(false)}>
+                <X size={22} color={colors.charcoalBlack} />
+              </TouchableOpacity>
             </View>
-          ))}
-        </View>
+            {availableCoupons.map(coupon => {
+              const discount = calcCouponDiscount(coupon, subtotal);
+              const isSel = selectedCoupon?.id === coupon.id;
+              return (
+                <TouchableOpacity key={coupon.id}
+                  onPress={() => { setSelectedCoupon(isSel ? null : coupon); setShowCouponSheet(false); }}
+                  style={[styles.couponOption, isSel && styles.couponOptionActive]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.couponOptName}>{coupon.name}</Text>
+                    <Text style={styles.couponOptMeta}>
+                      최소 주문 {coupon.minOrderAmount.toLocaleString()}원 · ~{coupon.endDate}
+                    </Text>
+                  </View>
+                  <Text style={styles.couponOptDiscount}>-{discount.toLocaleString()}원</Text>
+                </TouchableOpacity>
+              );
+            })}
+            {coupons.filter(c => subtotal < c.minOrderAmount).map(coupon => (
+              <View key={coupon.id} style={[styles.couponOption, styles.couponOptionDisabled]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.couponOptName}>{coupon.name}</Text>
+                  <Text style={[styles.couponOptMeta, { color: colors.alertRed }]}>
+                    최소 주문 {coupon.minOrderAmount.toLocaleString()}원 이상 사용 가능
+                  </Text>
+                </View>
+                <Text style={[styles.couponOptDiscount, { color: colors.mediumGray, fontSize: 13 }]}>
+                  {coupon.discountType === '정액'
+                    ? `${coupon.discountValue.toLocaleString()}원 할인`
+                    : `${coupon.discountValue}% 할인`}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
@@ -229,49 +299,106 @@ export default function OrderScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.softGray },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.white, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.softGray },
-  backBtn: { padding: 2 },
+  header: {
+    backgroundColor: colors.white, flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 14, gap: 12,
+    borderBottomWidth: 1, borderBottomColor: colors.softGray,
+  },
+  backBtn: { padding: 4 },
   headerTitle: { fontSize: 17, fontWeight: '800', color: colors.charcoalBlack },
-  card: { backgroundColor: colors.white, padding: 16, marginBottom: 8 },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: colors.mediumGray, marginBottom: 12 },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  label: { fontSize: 13, color: colors.mediumGray },
-  value: { fontSize: 13, fontWeight: '700', color: colors.charcoalBlack },
-  couponRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.white, padding: 16, marginBottom: 8 },
-  couponLabel: { flex: 1, fontSize: 14, color: colors.charcoalBlack },
+  content: { padding: 12, paddingBottom: 140, gap: 12 },
+  card: { backgroundColor: colors.white, borderRadius: 16, padding: 16 },
+  sectionLabel: { fontSize: 14, fontWeight: '800', color: colors.mediumGray, marginBottom: 12 },
+  productRow: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  productThumb: {
+    width: 64, height: 64, backgroundColor: colors.softGray, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  productEmoji: { fontSize: 32 },
+  productInfo: { flex: 1 },
+  productName: { fontSize: 15, fontWeight: '700', color: colors.charcoalBlack },
+  productStore: { fontSize: 13, color: colors.mediumGray, marginTop: 3 },
+  productPrice: { fontSize: 14, fontWeight: '700', color: colors.primaryGreen, marginTop: 3 },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 7 },
+  infoRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.softGray },
+  infoLabel: { fontSize: 13, color: colors.mediumGray, flexShrink: 0, marginRight: 8 },
+  infoValue: { fontSize: 13, fontWeight: '600', color: colors.charcoalBlack, textAlign: 'right', flex: 1 },
+  pickupPlaceLabel: { fontSize: 13, color: colors.mediumGray, marginBottom: 10 },
+  pickupCard: {
+    backgroundColor: colors.softGray, borderRadius: 10, padding: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
+  pickupAddress: { fontSize: 13, color: colors.charcoalBlack, flex: 1 },
+  couponRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  couponLeft: { flexDirection: 'row', alignItems: 'center' },
+  couponCountBadge: {
+    backgroundColor: colors.freshMint, borderRadius: 20,
+    paddingHorizontal: 7, paddingVertical: 2, marginLeft: 6,
+  },
+  couponCountText: { fontSize: 12, fontWeight: '700', color: colors.primaryGreen },
+  couponSelectBtn: { fontSize: 13, color: colors.primaryGreen, fontWeight: '700' },
+  couponNoneText: { fontSize: 13, color: colors.mediumGray },
+  couponRemoveBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  couponRemoveText: { fontSize: 13, color: colors.alertRed, fontWeight: '600' },
+  selectedCoupon: {
+    marginTop: 10, backgroundColor: colors.freshMint, borderRadius: 10, padding: '10px 14px',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 14, paddingVertical: 10,
+  },
+  selectedCouponName: { fontSize: 13, fontWeight: '700', color: colors.primaryGreen },
+  selectedCouponInfo: { fontSize: 12, color: colors.primaryGreen, marginTop: 2 },
+  selectedCouponDiscount: { fontSize: 15, fontWeight: '800', color: colors.primaryGreen },
   payGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  payBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: colors.softGray },
-  payBtnActive: { borderColor: colors.primaryGreen, backgroundColor: colors.freshMint },
-  payLabel: { fontSize: 13, color: colors.mediumGray },
+  payBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    padding: 12, backgroundColor: colors.softGray,
+    borderRadius: 12, width: '48%',
+    borderWidth: 1.5, borderColor: 'transparent',
+  },
+  payBtnActive: { backgroundColor: colors.freshMint, borderColor: colors.primaryGreen },
+  payLabel: { fontSize: 13, color: colors.charcoalBlack },
   payLabelActive: { color: colors.primaryGreen, fontWeight: '700' },
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  priceLabel: { fontSize: 13, color: colors.mediumGray },
-  priceValue: { fontSize: 13, color: colors.charcoalBlack },
-  totalRow: { borderTopWidth: 1, borderTopColor: colors.softGray, paddingTop: 10, marginTop: 4, marginBottom: 0 },
-  totalLabel: { fontSize: 15, fontWeight: '800', color: colors.charcoalBlack },
-  totalValue: { fontSize: 17, fontWeight: '900', color: colors.primaryGreen },
-  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
-  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.softGray, backgroundColor: colors.softGray, alignItems: 'center', justifyContent: 'center' },
-  checkboxChecked: { backgroundColor: colors.primaryGreen, borderColor: colors.primaryGreen },
-  checkmark: { color: colors.white, fontSize: 13, fontWeight: '900' },
-  checkText: { flex: 1, fontSize: 13, color: colors.charcoalBlack },
-  footer: { padding: 16, backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: colors.softGray },
-  payNowBtn: { backgroundColor: colors.primaryGreen, borderRadius: 14, padding: 16, alignItems: 'center' },
-  payNowBtnDisabled: { backgroundColor: '#C8CDD3' },
-  payNowText: { color: colors.white, fontSize: 16, fontWeight: '800' },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
-  sheet: { backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 40, maxHeight: '70%' },
-  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.softGray, alignSelf: 'center', marginBottom: 16 },
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
+  priceLbl: { fontSize: 13, color: colors.mediumGray },
+  priceVal: { fontSize: 13, fontWeight: '600', color: colors.charcoalBlack },
+  priceTotalRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    borderTopWidth: 2, borderTopColor: colors.softGray,
+    marginTop: 8, paddingTop: 8,
+  },
+  priceTotalLbl: { fontSize: 15, fontWeight: '800', color: colors.charcoalBlack },
+  priceTotalVal: { fontSize: 18, fontWeight: '900', color: colors.primaryGreen },
+  confirmRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 10, gap: 10 },
+  confirmRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.softGray },
+  checkbox: {
+    width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+    backgroundColor: colors.softGray, borderWidth: 2, borderColor: '#D0D3D7',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  checkboxOn: { backgroundColor: colors.primaryGreen, borderColor: colors.primaryGreen },
+  confirmText: { fontSize: 13, color: colors.charcoalBlack, lineHeight: 20, flex: 1 },
+  bottomBar: { backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: colors.softGray, padding: 12 },
+  payOrderBtn: {
+    backgroundColor: colors.primaryGreen, borderRadius: 14,
+    padding: 16, alignItems: 'center',
+  },
+  payOrderBtnOff: { backgroundColor: colors.mediumGray },
+  payOrderBtnText: { fontSize: 17, fontWeight: '800', color: colors.white },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 20, paddingBottom: 40,
+  },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   sheetTitle: { fontSize: 17, fontWeight: '800', color: colors.charcoalBlack },
-  removeCoupon: { paddingVertical: 12, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.softGray, marginBottom: 8 },
-  removeCouponText: { fontSize: 14, color: colors.mediumGray },
-  couponItem: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: colors.softGray, borderRadius: 12, padding: 14, marginBottom: 8 },
-  couponItemSelected: { borderColor: colors.primaryGreen, backgroundColor: colors.freshMint },
-  couponItemUnavail: { opacity: 0.5 },
-  couponItemLeft: { flex: 1 },
-  couponItemDiscount: { fontSize: 16, fontWeight: '900', color: colors.primaryGreen, marginBottom: 2 },
-  couponItemName: { fontSize: 13, color: colors.charcoalBlack, marginBottom: 4 },
-  couponItemCond: { fontSize: 11, color: colors.mediumGray },
-  couponCheck: { fontSize: 18, color: colors.primaryGreen, fontWeight: '900' },
+  couponOption: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: colors.softGray, borderRadius: 14, padding: 14,
+    marginBottom: 10, borderWidth: 1.5, borderColor: 'transparent',
+  },
+  couponOptionActive: { backgroundColor: colors.freshMint, borderColor: colors.primaryGreen },
+  couponOptionDisabled: { opacity: 0.5 },
+  couponOptName: { fontSize: 14, fontWeight: '700', color: colors.charcoalBlack },
+  couponOptMeta: { fontSize: 12, color: colors.mediumGray, marginTop: 4 },
+  couponOptDiscount: { fontSize: 17, fontWeight: '900', color: colors.primaryGreen, marginLeft: 12 },
 });

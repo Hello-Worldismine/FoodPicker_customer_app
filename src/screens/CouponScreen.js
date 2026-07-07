@@ -5,12 +5,18 @@ import { ArrowLeft, Ticket } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 
+const TABS = [
+  { key: 'available', label: '사용 가능' },
+  { key: 'used',      label: '사용 완료' },
+];
+
 const USED_COUPONS = [
   { id: 'CPN-000', name: '첫 주문 감사 쿠폰', discountType: '정액', discountValue: 2000, minOrderAmount: 5000, endDate: '2024.05.31', usedAt: '2024.05.20' },
 ];
 
-function discountLabel(c) {
-  return c.discountType === '정액' ? `${c.discountValue.toLocaleString()}원 할인` : `${c.discountValue}% 할인`;
+function discountLabel(coupon) {
+  if (coupon.discountType === '정액') return `${coupon.discountValue.toLocaleString()}원 할인`;
+  return `${coupon.discountValue}% 할인`;
 }
 
 function CouponCard({ coupon, used }) {
@@ -21,7 +27,9 @@ function CouponCard({ coupon, used }) {
           <Ticket size={22} color={used ? colors.mediumGray : colors.primaryGreen} />
         </View>
         <View style={styles.couponInfo}>
-          <Text style={[styles.couponDiscount, used && { color: colors.mediumGray }]}>{discountLabel(coupon)}</Text>
+          <Text style={[styles.couponDiscount, { color: used ? colors.mediumGray : colors.primaryGreen }]}>
+            {discountLabel(coupon)}
+          </Text>
           <Text style={styles.couponName} numberOfLines={1}>{coupon.name}</Text>
         </View>
         {used && (
@@ -31,8 +39,10 @@ function CouponCard({ coupon, used }) {
         )}
       </View>
       <View style={styles.couponBottom}>
-        <Text style={styles.couponCond}>{coupon.minOrderAmount.toLocaleString()}원 이상 결제 시</Text>
-        <Text style={styles.couponDate}>{used ? `사용일 ${coupon.usedAt}` : `~${coupon.endDate}`}</Text>
+        <Text style={styles.couponCondition}>{coupon.minOrderAmount.toLocaleString()}원 이상 결제 시</Text>
+        <Text style={[styles.couponDate, used && { color: colors.mediumGray }]}>
+          {used ? `사용일 ${coupon.usedAt}` : `~${coupon.endDate}`}
+        </Text>
       </View>
     </View>
   );
@@ -42,9 +52,17 @@ export default function CouponScreen({ navigation }) {
   const { coupons } = useApp();
   const [tab, setTab] = useState('available');
   const [code, setCode] = useState('');
-  const [codeMsg, setCodeMsg] = useState('');
+  const [codeError, setCodeError] = useState('');
+  const [codeSuccess, setCodeSuccess] = useState('');
 
-  const list = tab === 'available' ? coupons : USED_COUPONS;
+  function handleRegister() {
+    if (!code.trim()) { setCodeError('쿠폰 코드를 입력해주세요.'); setCodeSuccess(''); return; }
+    setCodeError('');
+    setCodeSuccess('유효하지 않은 쿠폰 코드입니다.');
+    setCode('');
+  }
+
+  const listToShow = tab === 'available' ? coupons : USED_COUPONS;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -56,46 +74,51 @@ export default function CouponScreen({ navigation }) {
         <Text style={styles.headerCount}>{coupons.length}장 보유</Text>
       </View>
 
-      {/* 쿠폰 코드 등록 */}
-      <View style={styles.codeSection}>
-        <Text style={styles.codeTitle}>쿠폰 코드 등록</Text>
-        <View style={styles.codeRow}>
-          <TextInput
-            value={code}
-            onChangeText={t => { setCode(t); setCodeMsg(''); }}
-            placeholder="쿠폰 코드를 입력하세요"
-            placeholderTextColor={colors.mediumGray}
-            style={styles.codeInput}
-            onSubmitEditing={() => { setCodeMsg('유효하지 않은 쿠폰 코드입니다.'); setCode(''); }}
-          />
-          <TouchableOpacity
-            style={styles.codeBtn}
-            onPress={() => { setCodeMsg('유효하지 않은 쿠폰 코드입니다.'); setCode(''); }}
-          >
-            <Text style={styles.codeBtnText}>등록</Text>
-          </TouchableOpacity>
-        </View>
-        {!!codeMsg && <Text style={styles.codeError}>{codeMsg}</Text>}
-      </View>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
 
-      {/* 탭 */}
-      <View style={styles.tabs}>
-        {[['available', '사용 가능'], ['used', '사용 완료']].map(([key, label]) => (
-          <TouchableOpacity key={key} style={[styles.tab, tab === key && styles.tabActive]} onPress={() => setTab(key)}>
-            <Text style={[styles.tabText, tab === key && styles.tabTextActive]}>{label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
-        {list.length === 0 ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🎟️</Text>
-            <Text style={styles.emptyText}>{tab === 'available' ? '보유한 쿠폰이 없습니다' : '사용한 쿠폰이 없습니다'}</Text>
+        {/* 쿠폰 코드 등록 */}
+        <View style={styles.codeSection}>
+          <Text style={styles.codeSectionTitle}>쿠폰 코드 등록</Text>
+          <View style={styles.codeRow}>
+            <TextInput
+              value={code}
+              onChangeText={v => { setCode(v); setCodeError(''); setCodeSuccess(''); }}
+              onSubmitEditing={handleRegister}
+              placeholder="쿠폰 코드를 입력하세요"
+              style={[styles.codeInput, codeError && { borderColor: colors.alertRed }]}
+              placeholderTextColor={colors.mediumGray}
+            />
+            <TouchableOpacity onPress={handleRegister} style={styles.codeBtn}>
+              <Text style={styles.codeBtnText}>등록</Text>
+            </TouchableOpacity>
           </View>
-        ) : list.map(c => (
-          <CouponCard key={c.id} coupon={c} used={tab === 'used'} />
-        ))}
+          {!!codeError && <Text style={styles.codeError}>{codeError}</Text>}
+          {!!codeSuccess && <Text style={styles.codeError}>{codeSuccess}</Text>}
+        </View>
+
+        {/* 탭 */}
+        <View style={styles.tabs}>
+          {TABS.map(t => (
+            <TouchableOpacity key={t.key} onPress={() => setTab(t.key)}
+              style={[styles.tab, tab === t.key && styles.tabActive]}>
+              <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>{t.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* 쿠폰 목록 */}
+        <View style={styles.list}>
+          {listToShow.length === 0 ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyEmoji}>🎟️</Text>
+              <Text style={styles.emptyText}>
+                {tab === 'available' ? '보유한 쿠폰이 없습니다' : '사용한 쿠폰이 없습니다'}
+              </Text>
+            </View>
+          ) : listToShow.map(coupon => (
+            <CouponCard key={coupon.id} coupon={coupon} used={tab === 'used'} />
+          ))}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -103,36 +126,62 @@ export default function CouponScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.softGray },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.white, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.softGray },
-  backBtn: { padding: 2 },
+  header: {
+    backgroundColor: colors.white, flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 14, gap: 12,
+    borderBottomWidth: 1, borderBottomColor: colors.softGray,
+  },
+  backBtn: { padding: 4 },
   headerTitle: { flex: 1, fontSize: 17, fontWeight: '800', color: colors.charcoalBlack },
   headerCount: { fontSize: 13, fontWeight: '700', color: colors.primaryGreen },
+  content: { paddingBottom: 100 },
   codeSection: { backgroundColor: colors.white, padding: 16, marginBottom: 8 },
-  codeTitle: { fontSize: 14, fontWeight: '700', color: colors.charcoalBlack, marginBottom: 10 },
+  codeSectionTitle: { fontSize: 14, fontWeight: '700', color: colors.charcoalBlack, marginBottom: 10 },
   codeRow: { flexDirection: 'row', gap: 8 },
-  codeInput: { flex: 1, backgroundColor: colors.softGray, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, color: colors.charcoalBlack },
-  codeBtn: { backgroundColor: colors.primaryGreen, borderRadius: 10, paddingHorizontal: 18, paddingVertical: 11 },
-  codeBtnText: { color: colors.white, fontWeight: '700', fontSize: 14 },
+  codeInput: {
+    flex: 1, backgroundColor: colors.softGray,
+    borderWidth: 1.5, borderColor: colors.softGray,
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11,
+    fontSize: 14, color: colors.charcoalBlack,
+  },
+  codeBtn: {
+    backgroundColor: colors.primaryGreen, borderRadius: 10,
+    paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center',
+  },
+  codeBtnText: { fontSize: 14, fontWeight: '700', color: colors.white },
   codeError: { fontSize: 12, color: colors.alertRed, marginTop: 6 },
-  tabs: { flexDirection: 'row', backgroundColor: colors.white, borderBottomWidth: 2, borderBottomColor: colors.softGray, marginBottom: 8 },
-  tab: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2.5, borderBottomColor: 'transparent', marginBottom: -2 },
+  tabs: {
+    backgroundColor: colors.white, flexDirection: 'row',
+    borderBottomWidth: 2, borderBottomColor: colors.softGray, marginBottom: 8,
+  },
+  tab: {
+    flex: 1, paddingVertical: 12, alignItems: 'center',
+    borderBottomWidth: 2.5, borderBottomColor: 'transparent', marginBottom: -2,
+  },
   tabActive: { borderBottomColor: colors.primaryGreen },
   tabText: { fontSize: 14, color: colors.mediumGray },
   tabTextActive: { color: colors.primaryGreen, fontWeight: '800' },
-  list: { padding: 16, paddingBottom: 60 },
-  empty: { alignItems: 'center', paddingTop: 60 },
+  list: { padding: '4px 16px 100px', paddingHorizontal: 16, paddingVertical: 4 },
+  empty: { alignItems: 'center', paddingTop: 72 },
   emptyEmoji: { fontSize: 52, marginBottom: 12 },
   emptyText: { fontSize: 15, color: colors.mediumGray },
-  couponCard: { backgroundColor: colors.white, borderRadius: 16, marginBottom: 10, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 4, elevation: 2 },
-  couponCardUsed: { opacity: 0.65 },
-  couponTop: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12, borderBottomWidth: 1.5, borderStyle: 'dashed' },
-  couponIcon: { width: 44, height: 44, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  couponCard: {
+    backgroundColor: colors.white, borderRadius: 16, marginBottom: 10,
+    overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 6, elevation: 2,
+  },
+  couponCardUsed: { opacity: 0.65, shadowOpacity: 0, elevation: 0 },
+  couponTop: {
+    flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12,
+    borderBottomWidth: 1.5, borderStyle: 'dashed',
+  },
+  couponIcon: { width: 44, height: 44, borderRadius: 13, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   couponInfo: { flex: 1 },
-  couponDiscount: { fontSize: 19, fontWeight: '900', color: colors.primaryGreen },
+  couponDiscount: { fontSize: 19, fontWeight: '900' },
   couponName: { fontSize: 13, fontWeight: '600', color: colors.charcoalBlack, marginTop: 2 },
-  usedBadge: { backgroundColor: '#E0E0E0', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  usedBadge: { backgroundColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
   usedBadgeText: { fontSize: 11, fontWeight: '700', color: colors.mediumGray },
-  couponBottom: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10 },
-  couponCond: { fontSize: 12, color: colors.mediumGray },
-  couponDate: { fontSize: 12, color: colors.charcoalBlack, fontWeight: '600' },
+  couponBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
+  couponCondition: { fontSize: 12, color: colors.mediumGray },
+  couponDate: { fontSize: 12, fontWeight: '600', color: colors.charcoalBlack },
 });
