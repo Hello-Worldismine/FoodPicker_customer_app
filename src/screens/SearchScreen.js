@@ -8,7 +8,7 @@ import { ArrowLeft, Search, X, SlidersHorizontal, ChevronDown } from 'lucide-rea
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 import { stores } from '../data/mockData';
-import ProductCard from '../components/ProductCard';
+import ListProductCard from '../components/ListProductCard';
 
 const FILTERS = {
   distance: ['500m', '1km', '3km', '5km'],
@@ -196,7 +196,7 @@ export default function SearchScreen({ navigation }) {
           {searchedStores.length > 0 && (
             <View style={styles.storeResults}>
               <Text style={styles.resultGroupTitle}>
-                🏪 가게 <Text style={styles.resultGroupCount}>{searchedStores.length}개</Text>
+                가게 <Text style={styles.resultGroupCount}>{searchedStores.length}개</Text>
               </Text>
               {searchedStores.map(s => (
                 <TouchableOpacity
@@ -226,11 +226,11 @@ export default function SearchScreen({ navigation }) {
             <View>
               {searchedStores.length > 0 && (
                 <Text style={[styles.resultGroupTitle, { marginTop: 8 }]}>
-                  🍽 음식 <Text style={styles.resultGroupCount}>{results.length}개</Text>
+                  음식 <Text style={styles.resultGroupCount}>{results.length}개</Text>
                 </Text>
               )}
               {results.map(p => (
-                <ProductCard
+                <ListProductCard
                   key={p.id}
                   product={p}
                   onPress={pr => navigation.navigate('ProductDetail', { productId: pr.id })}
@@ -273,7 +273,7 @@ export default function SearchScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.softGray },
+  safe: { flex: 1, backgroundColor: colors.white },
 
   /* 헤더 */
   header: { backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: colors.softGray },
@@ -339,16 +339,18 @@ const styles = StyleSheet.create({
   },
   recentChipText: { fontSize: 14, color: colors.charcoalBlack, fontWeight: '500' },
   suggChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: colors.softGray, borderRadius: 20,
-    paddingHorizontal: 16, paddingVertical: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: colors.white, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
   },
-  suggChipText: { fontSize: 14, color: colors.charcoalBlack, fontWeight: '500' },
+  suggChipText: { fontSize: 13, color: colors.charcoalBlack, fontWeight: '500' },
 
   /* 검색 결과 */
-  resultPage: { padding: 12, paddingHorizontal: 16, paddingBottom: 100 },
-  storeResults: { marginBottom: 8 },
-  resultGroupTitle: { fontSize: 16, fontWeight: '800', color: colors.charcoalBlack, marginBottom: 12 },
+  resultPage: { backgroundColor: colors.white, paddingBottom: 100 },
+  storeResults: { marginBottom: 8, paddingHorizontal: 16, paddingTop: 12 },
+  resultGroupTitle: { fontSize: 16, fontWeight: '800', color: colors.charcoalBlack, marginBottom: 12, paddingHorizontal: 16, paddingTop: 8 },
   resultGroupCount: { fontSize: 14, color: colors.mediumGray, fontWeight: '400' },
   storeRow: {
     flexDirection: 'row', alignItems: 'center', gap: 14,

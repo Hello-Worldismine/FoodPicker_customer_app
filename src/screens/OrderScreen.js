@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, CreditCard, Smartphone, Check, Tag, X } from 'lucide-react-native';
+import { ArrowLeft, CreditCard, Smartphone, Check, Tag, X, MapPin } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 
@@ -128,7 +128,7 @@ export default function OrderScreen({ navigation, route }) {
           <View style={{ marginTop: 14 }}>
             <Text style={styles.pickupPlaceLabel}>픽업 장소</Text>
             <View style={styles.pickupCard}>
-              <Text style={{ fontSize: 18 }}>📍</Text>
+              <MapPin size={18} color={colors.primaryGreen} />
               <Text style={styles.pickupAddress}>{product.pickupAddress}</Text>
             </View>
           </View>

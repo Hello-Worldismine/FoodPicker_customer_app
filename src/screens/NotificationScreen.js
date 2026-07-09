@@ -74,7 +74,7 @@ export default function NotificationScreen({ navigation }) {
             <Text style={styles.groupLabel}>{group.label}</Text>
             {group.items.map(notif => {
               const typeInfo = NOTIF_TYPES[notif.type] || NOTIF_TYPES.ad;
-              const Icon = typeInfo.icon;
+              const Icon = typeInfo.Icon;
               return (
                 <TouchableOpacity key={notif.id} activeOpacity={0.85}
                   style={[styles.notifCard, !notif.read && styles.notifCardUnread]}>

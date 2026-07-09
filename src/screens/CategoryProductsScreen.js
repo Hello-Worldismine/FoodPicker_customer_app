@@ -6,13 +6,30 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, ChevronDown } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
-import ProductCard from '../components/ProductCard';
+import ListProductCard from '../components/ListProductCard';
 
 const SORT_OPTIONS = ['가까운 순', '마감 임박 순', '할인율 높은 순', '낮은 가격 순'];
 
 const CATEGORY_EMOJI = {
-  '전체': '🛒', '빵': '🥐', '도시락': '🍱', '샐러드': '🥗',
-  '반찬': '🥡', '디저트': '🍰', '음료': '☕', '마감임박': '⏰',
+  '전체': '🛒',
+  '베이커리·디저트': '🥐',
+  '도시락·간편식': '🍱',
+  '샐러드·건강식': '🥗',
+  '반찬·밀키트': '🥘',
+  '채소·과일': '🥦',
+  '정육·수산': '🥩',
+  '음료·기타': '🧋',
+};
+
+// 새 카테고리명 → 실제 상품 category 필드값 매핑
+const CATEGORY_MAP = {
+  '베이커리·디저트': ['빵', '디저트', '베이커리'],
+  '도시락·간편식':   ['도시락', '간편식'],
+  '샐러드·건강식':   ['샐러드', '건강식'],
+  '반찬·밀키트':    ['반찬', '밀키트'],
+  '채소·과일':      ['채소', '과일'],
+  '정육·수산':      ['정육', '수산'],
+  '음료·기타':      ['음료', '기타'],
 };
 
 export default function CategoryProductsScreen({ route, navigation }) {
@@ -25,10 +42,11 @@ export default function CategoryProductsScreen({ route, navigation }) {
     p => p.status === 'selling' && p.stock > 0 && new Date(p.expiryDate) > new Date()
   );
 
+  const mappedCats = CATEGORY_MAP[category];
   let filtered = category === '전체'
     ? selling
-    : category === '마감임박'
-      ? selling.filter(p => p.badges?.some(b => b.includes('마감')))
+    : mappedCats
+      ? selling.filter(p => mappedCats.includes(p.category))
       : selling.filter(p => p.category === category);
 
   let sorted = [...filtered];
@@ -47,7 +65,6 @@ export default function CategoryProductsScreen({ route, navigation }) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <ArrowLeft size={22} color={colors.charcoalBlack} />
           </TouchableOpacity>
-          <Text style={styles.emojiIcon}>{emoji}</Text>
           <Text style={styles.headerTitle}>{category}</Text>
           <Text style={styles.headerCount}>{sorted.length}개</Text>
         </View>
@@ -68,14 +85,15 @@ export default function CategoryProductsScreen({ route, navigation }) {
         data={sorted}
         keyExtractor={item => String(item.id)}
         renderItem={({ item }) => (
-          <ProductCard
+          <ListProductCard
             product={item}
             onPress={p => navigation.navigate('ProductDetail', { productId: p.id })}
             onLike={handleLike}
             onStorePress={storeId => navigation.navigate('Store', { storeId })}
           />
         )}
-        contentContainerStyle={styles.list}
+        style={styles.list}
+        contentContainerStyle={{ paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -132,7 +150,7 @@ const styles = StyleSheet.create({
   },
   sortBtnText: { fontSize: 13, fontWeight: '600', color: colors.charcoalBlack },
 
-  list: { padding: 16, paddingBottom: 40 },
+  list: { backgroundColor: colors.white },
 
   empty: { alignItems: 'center', paddingTop: 80 },
   emptyEmoji: { fontSize: 52, marginBottom: 14 },

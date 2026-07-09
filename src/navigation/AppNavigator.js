@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, Map, Heart, ClipboardList, User } from 'lucide-react-native';
 
 import { colors } from '../theme';
@@ -27,6 +28,14 @@ import MyOrderListScreen from '../screens/MyOrderListScreen';
 import TermsScreen from '../screens/TermsScreen';
 import SearchScreen from '../screens/SearchScreen';
 import CategoryProductsScreen from '../screens/CategoryProductsScreen';
+import LikedStoresScreen from '../screens/LikedStoresScreen';
+import AddressScreen from '../screens/AddressScreen';
+import AddressEditScreen from '../screens/AddressEditScreen';
+import AddressDetailScreen from '../screens/AddressDetailScreen';
+import PaymentMethodScreen from '../screens/PaymentMethodScreen';
+import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
+import SupportScreen from '../screens/SupportScreen';
+import FAQScreen from '../screens/FAQScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -35,15 +44,23 @@ function TabBarIcon({ Icon, focused, label }) {
   return (
     <View style={styles.tabItem}>
       <Icon size={22} color={focused ? colors.primaryGreen : colors.mediumGray} />
-      <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>{label}</Text>
+      <Text style={[styles.tabLabel, focused && styles.tabLabelActive]} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
     </View>
   );
 }
 
 function MainTabs() {
+  const insets = useSafeAreaInsets();
+  const bottomPad = Platform.OS === 'android' ? insets.bottom + 8 : 24;
+  const tabBarH = Platform.OS === 'android' ? 62 + insets.bottom : 80;
+
   return (
     <Tab.Navigator
-      screenOptions={{ headerShown: false, tabBarStyle: styles.tabBar, tabBarShowLabel: false }}
+      screenOptions={{
+        headerShown: false,
+        tabBarShowLabel: false,
+        tabBarStyle: [styles.tabBar, { height: tabBarH, paddingBottom: bottomPad }],
+      }}
     >
       <Tab.Screen
         name="Home" component={HomeScreen}
@@ -86,6 +103,14 @@ export default function AppNavigator() {
         <Stack.Screen name="Terms" component={TermsScreen} />
         <Stack.Screen name="Search" component={SearchScreen} />
         <Stack.Screen name="CategoryProducts" component={CategoryProductsScreen} />
+        <Stack.Screen name="LikedStores" component={LikedStoresScreen} />
+        <Stack.Screen name="Address" component={AddressScreen} />
+        <Stack.Screen name="AddressEdit" component={AddressEditScreen} />
+        <Stack.Screen name="AddressDetail" component={AddressDetailScreen} />
+        <Stack.Screen name="PaymentMethod" component={PaymentMethodScreen} />
+        <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
+        <Stack.Screen name="Support" component={SupportScreen} />
+        <Stack.Screen name="FAQ" component={FAQScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -93,9 +118,7 @@ export default function AppNavigator() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: Platform.OS === 'ios' ? 80 : 62,
     paddingTop: 6,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
     backgroundColor: colors.white,
     borderTopWidth: 1,
     borderTopColor: '#EAEAEA',
@@ -106,6 +129,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   tabItem: { alignItems: 'center', justifyContent: 'center', gap: 3 },
-  tabLabel: { fontSize: 10, color: colors.mediumGray },
+  tabLabel: { fontSize: 10, color: colors.mediumGray, textAlign: 'center' },
   tabLabelActive: { color: colors.primaryGreen, fontWeight: '700' },
 });

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  ArrowLeft, Share2, Heart, MapPin, ChevronDown, ChevronUp,
+  ArrowLeft, Share2, Heart, MapPin, Store, ChevronDown, ChevronUp,
   AlertTriangle, Clock,
 } from 'lucide-react-native';
 import { colors } from '../theme';
@@ -57,7 +57,10 @@ export default function ProductDetailScreen({ route, navigation }) {
 
         {/* 이미지 영역 (오버레이 헤더 포함) */}
         <View style={styles.imageArea}>
-          <Text style={styles.emoji}>{product.emoji}</Text>
+          {product.image
+            ? <Image source={{ uri: product.image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+            : <Text style={styles.emoji}>{product.emoji}</Text>
+          }
 
           {/* 상단 버튼 바 (오버레이) */}
           <SafeAreaView style={styles.imageHeader} edges={['top']}>
@@ -99,10 +102,20 @@ export default function ProductDetailScreen({ route, navigation }) {
             style={styles.storeRow}
             onPress={() => navigation.navigate('Store', { storeId: product.storeId })}
           >
-            <MapPin size={13} color={colors.primaryGreen} />
+            <Store size={13} color={colors.primaryGreen} />
             <Text style={styles.storeName}>{product.store}</Text>
             <ChevronDown size={13} color={colors.primaryGreen} style={{ transform: [{ rotate: '-90deg' }] }} />
           </TouchableOpacity>
+          {product.distance != null && (
+            <View style={styles.distRow}>
+              <MapPin size={11} color={colors.mediumGray} />
+              <Text style={styles.distText}>
+                {product.distance >= 1000
+                  ? `${(product.distance / 1000).toFixed(1)}km`
+                  : `${product.distance}m`}
+              </Text>
+            </View>
+          )}
 
           {/* 가격 */}
           <View style={styles.priceArea}>
@@ -114,8 +127,13 @@ export default function ProductDetailScreen({ route, navigation }) {
             </View>
             <Text style={styles.salePrice}>{product.salePrice.toLocaleString()}원</Text>
           </View>
+        </View>
 
-          {/* 정보 그리드 */}
+        {/* 가격 흐름 카드 */}
+        <PriceFlowCard product={product} />
+
+        {/* 정보 그리드 카드 */}
+        <View style={styles.card}>
           <View style={styles.infoGrid}>
             {[
               { label: '남은 수량',      value: isSoldout ? '품절' : `${product.stock}개`, warn: isSoldout },
@@ -222,6 +240,76 @@ export default function ProductDetailScreen({ route, navigation }) {
   );
 }
 
+function getPriceHistory(product) {
+  const orig = product.originalPrice;
+  const curr = product.salePrice;
+  const drop = orig - curr;
+  const pickupH = new Date(product.pickupStart).getHours();
+  const startH = Math.max(8, pickupH - 6);
+  const pad = h => (h < 10 ? `0${h}` : String(h));
+  return [
+    { time: `${pad(startH)}:00`,     label: '판매 시작가',       price: orig, isCurrent: false },
+    { time: `${pad(startH + 2)}:00`, label: '1차 할인 적용',     price: Math.round((orig - drop * 0.28) / 100) * 100, isCurrent: false },
+    { time: `${pad(startH + 4)}:00`, label: '마감 할인 진행',    price: Math.round((orig - drop * 0.60) / 100) * 100, isCurrent: false },
+    { time: '현재',                   label: '오늘 최종 할인 중', price: curr, isCurrent: true  },
+  ];
+}
+
+function PriceFlowCard({ product }) {
+  const [expanded, setExpanded] = useState(false);
+  const history = getPriceHistory(product);
+  const priceDrop = product.originalPrice - product.salePrice;
+  const tPoints = [history[0], history[2], history[3]];
+
+  return (
+    <View style={styles.pfCard}>
+      {/* 헤더 */}
+      <Text style={styles.pfTitle}>{expanded ? '가격 하락 내역' : '오늘 가격 흐름'}</Text>
+      <Text style={styles.pfSub}>
+        {expanded ? '시작가 → 현재가' : `${priceDrop.toLocaleString()}원 내려갔어요`}
+      </Text>
+
+      {/* 타임라인 */}
+      <View style={styles.pfTimeline}>
+        <View style={styles.pfTrackBg} />
+        {tPoints.map((p, i) => (
+          <View key={i} style={styles.pfPointCol}>
+            <View style={[styles.pfDot, p.isCurrent && styles.pfDotActive]} />
+            <Text style={[styles.pfPointTime, p.isCurrent && styles.pfActive]}>{p.time}</Text>
+            <Text style={[styles.pfPointPrice, p.isCurrent && styles.pfActive]}>
+              {p.price.toLocaleString()}원
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      {/* 펼쳐진 상세 내역 */}
+      {expanded && (
+        <View style={styles.pfDetailWrap}>
+          {history.map((h, i) => (
+            <View key={i} style={[styles.pfRow, h.isCurrent && styles.pfRowCurrent]}>
+              <Text style={[styles.pfRowTime, h.isCurrent && styles.pfActive]}>{h.time}</Text>
+              <Text style={[styles.pfRowLabel, h.isCurrent && styles.pfActive]}>{h.label}</Text>
+              <Text style={[styles.pfRowPrice, h.isCurrent && styles.pfActive]}>
+                {h.price.toLocaleString()}원
+              </Text>
+            </View>
+          ))}
+          <Text style={styles.pfTotalBadge}>총 {product.discountRate}% 할인!</Text>
+        </View>
+      )}
+
+      {/* 펼치기 / 접기 */}
+      <TouchableOpacity style={styles.pfToggleBtn} onPress={() => setExpanded(v => !v)}>
+        <Text style={styles.pfToggleText}>{expanded ? '접기' : '가격 하락 내역 보기'}</Text>
+        {expanded
+          ? <ChevronUp size={14} color={colors.primaryGreen} />
+          : <ChevronDown size={14} color={colors.primaryGreen} />}
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 function MapGrid() {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -267,9 +355,14 @@ const styles = StyleSheet.create({
   productName: { fontSize: 20, fontWeight: '800', color: colors.charcoalBlack, marginBottom: 6 },
   storeRow: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingBottom: 16, paddingTop: 2,
+    paddingBottom: 6, paddingTop: 2,
   },
   storeName: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.primaryGreen },
+  distRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingBottom: 16,
+  },
+  distText: { fontSize: 12, color: colors.mediumGray },
 
   priceArea: { marginBottom: 16 },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
@@ -289,6 +382,65 @@ const styles = StyleSheet.create({
   infoGridValue: { fontSize: 13, fontWeight: '700', color: colors.charcoalBlack },
 
   cardTitle: { fontSize: 14, fontWeight: '800', color: colors.mediumGray, marginBottom: 12 },
+
+  /* ── 가격 흐름 카드 ── */
+  pfCard: {
+    backgroundColor: colors.white, marginBottom: 8,
+    paddingHorizontal: 16, paddingTop: 18, paddingBottom: 0,
+  },
+  pfTitle: { fontSize: 15, fontWeight: '800', color: colors.charcoalBlack, marginBottom: 3 },
+  pfSub: { fontSize: 12, color: colors.mediumGray, marginBottom: 20 },
+
+  /* 타임라인 */
+  pfTimeline: {
+    flexDirection: 'row', position: 'relative', marginBottom: 4,
+  },
+  pfTrackBg: {
+    position: 'absolute', top: 7,
+    left: '16.67%', right: '16.67%',
+    height: 2, backgroundColor: '#E0E0E0',
+  },
+  pfPointCol: { flex: 1, alignItems: 'center', zIndex: 1 },
+  pfDot: {
+    width: 14, height: 14, borderRadius: 7,
+    backgroundColor: colors.white, borderWidth: 2, borderColor: '#C8C8C8',
+    marginBottom: 6,
+  },
+  pfDotActive: { backgroundColor: colors.primaryGreen, borderColor: colors.primaryGreen },
+  pfPointTime: { fontSize: 11, color: colors.mediumGray, marginBottom: 2 },
+  pfPointPrice: { fontSize: 12, fontWeight: '700', color: colors.charcoalBlack },
+  pfActive: { color: colors.primaryGreen, fontWeight: '700' },
+
+  /* 상세 내역 */
+  pfDetailWrap: {
+    borderTopWidth: 1, borderTopColor: '#F0F0F0',
+    marginTop: 12, paddingTop: 4,
+  },
+  pfRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: '#F5F5F5',
+  },
+  pfRowCurrent: {
+    backgroundColor: '#F0FAF4', borderRadius: 8,
+    marginHorizontal: -4, paddingHorizontal: 4,
+    borderBottomWidth: 0,
+  },
+  pfRowTime: { width: 46, fontSize: 13, color: colors.mediumGray, fontWeight: '600' },
+  pfRowLabel: { flex: 1, fontSize: 13, color: colors.mediumGray },
+  pfRowPrice: { fontSize: 13, fontWeight: '800', color: colors.charcoalBlack },
+  pfTotalBadge: {
+    fontSize: 14, fontWeight: '900', color: colors.primaryGreen,
+    paddingVertical: 10, textAlign: 'center',
+  },
+
+  /* 펼치기/접기 버튼 */
+  pfToggleBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 4, paddingVertical: 13,
+    borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 6,
+  },
+  pfToggleText: { fontSize: 13, color: colors.primaryGreen, fontWeight: '600' },
 
   /* 주의사항 */
   noticeCard: { backgroundColor: '#FFF8E6', padding: 16, marginBottom: 8 },

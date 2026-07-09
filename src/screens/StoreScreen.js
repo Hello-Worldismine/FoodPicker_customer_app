@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  ArrowLeft, Share2, Star, Navigation, Phone, MessageSquare,
+  ArrowLeft, Share2, Heart, Star, Navigation, Phone, MessageSquare,
   MapPin, Clock,
 } from 'lucide-react-native';
 import { colors } from '../theme';
 import { stores } from '../data/mockData';
 import { useApp } from '../context/AppContext';
-import ProductCard from '../components/ProductCard';
+import ListProductCard from '../components/ListProductCard';
 
 const STATUS_COLOR = {
   selling: colors.primaryGreen,
@@ -18,7 +18,8 @@ const STATUS_COLOR = {
 
 export default function StoreScreen({ route, navigation }) {
   const { storeId } = route.params;
-  const { productList, handleLike } = useApp();
+  const { productList, handleLike, likedStores, handleStoreLike } = useApp();
+  const isLiked = likedStores.includes(storeId);
   const store = stores.find(s => s.id === storeId);
   const [tab, setTab] = useState('products');
 
@@ -42,15 +43,30 @@ export default function StoreScreen({ route, navigation }) {
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navBtn}>
               <ArrowLeft size={20} color={colors.white} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.navBtn}>
-              <Share2 size={18} color={colors.white} />
-            </TouchableOpacity>
+            <View style={styles.navRight}>
+              <TouchableOpacity
+                style={styles.navBtn}
+                onPress={() => handleStoreLike(storeId)}
+              >
+                <Heart
+                  size={20}
+                  color={colors.white}
+                  fill={isLiked ? colors.white : 'none'}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.navBtn}>
+                <Share2 size={18} color={colors.white} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* 매장 히어로 — 웹과 동일한 가로 레이아웃 */}
           <View style={styles.hero}>
             <View style={styles.storeIconWrap}>
-              <Text style={styles.storeIconEmoji}>{store.emoji}</Text>
+              {store.image
+                ? <Image source={{ uri: store.image }} style={styles.storeIconImg} resizeMode="cover" />
+                : <Text style={styles.storeIconEmoji}>{store.emoji}</Text>
+              }
             </View>
             <View style={styles.heroInfo}>
               <Text style={styles.heroName}>{store.name}</Text>
@@ -159,7 +175,7 @@ export default function StoreScreen({ route, navigation }) {
                 </View>
               )}
               {availableProducts.length > 0 && availableProducts.map(p => (
-                <ProductCard
+                <ListProductCard
                   key={p.id}
                   product={p}
                   onPress={pr => navigation.navigate('ProductDetail', { productId: pr.id })}
@@ -171,7 +187,7 @@ export default function StoreScreen({ route, navigation }) {
                 <View>
                   <Text style={styles.soldoutHeader}>품절 / 판매 종료</Text>
                   {soldoutProducts.map(p => (
-                    <ProductCard
+                    <ListProductCard
                       key={p.id}
                       product={p}
                       onPress={() => {}}
@@ -184,7 +200,7 @@ export default function StoreScreen({ route, navigation }) {
           )}
 
           {tab === 'info' && (
-            <View style={{ paddingTop: 12 }}>
+            <View style={{ paddingTop: 12, paddingHorizontal: 16 }}>
               {store.notice ? (
                 <View style={styles.noticeBox}>
                   <Text style={styles.noticeTitle}>📢 매장 공지</Text>
@@ -241,6 +257,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4,
   },
+  navRight: { flexDirection: 'row', gap: 6 },
   navBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.2)',
@@ -257,9 +274,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)',
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
     alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
+    flexShrink: 0, overflow: 'hidden',
   },
   storeIconEmoji: { fontSize: 36 },
+  storeIconImg: { width: '100%', height: '100%', borderRadius: 18 },
   heroInfo: { flex: 1 },
   heroName: { fontSize: 20, fontWeight: '900', color: colors.white, marginBottom: 4 },
   heroCategory: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginBottom: 8 },
@@ -314,13 +332,13 @@ const styles = StyleSheet.create({
   tabBtnActive: { borderBottomColor: colors.primaryGreen },
   tabText: { fontSize: 14, color: colors.mediumGray },
   tabTextActive: { color: colors.primaryGreen, fontWeight: '800' },
-  tabContent: { paddingHorizontal: 16 },
+  tabContent: {},
 
-  empty: { alignItems: 'center', paddingTop: 40 },
+  empty: { alignItems: 'center', paddingTop: 40, paddingHorizontal: 16 },
   emptyEmoji: { fontSize: 40, marginBottom: 10 },
   emptyText: { fontSize: 14, color: colors.mediumGray },
 
-  soldoutHeader: { fontSize: 13, fontWeight: '700', color: colors.mediumGray, marginBottom: 10, marginTop: 8 },
+  soldoutHeader: { fontSize: 13, fontWeight: '700', color: colors.mediumGray, marginBottom: 10, marginTop: 8, paddingHorizontal: 16 },
 
   /* 매장 정보 탭 */
   noticeBox: {

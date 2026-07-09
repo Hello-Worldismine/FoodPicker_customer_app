@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  ClipboardList, Ticket, CreditCard, Bell, HelpCircle, FileText,
+  ClipboardList, Ticket, Heart, CreditCard, Bell, HelpCircle, FileText,
   LogOut, UserX, ChevronRight, User,
 } from 'lucide-react-native';
 import { colors } from '../theme';
@@ -15,17 +15,18 @@ const ENV_STATS = [
 ];
 
 export default function MyPageScreen({ navigation }) {
-  const { orders, coupons } = useApp();
+  const { orders, coupons, likedStores } = useApp();
 
   const pendingCount = orders.filter(o => o.status === 'pending' || o.status === 'pickupReady').length;
 
   const menuItems = [
-    { key: 'orders',   Icon: ClipboardList, label: '주문내역',             onPress: () => navigation.navigate('MyOrders'),  badge: pendingCount > 0 ? pendingCount : null },
-    { key: 'coupons',  Icon: Ticket,        label: '쿠폰함',               onPress: () => navigation.navigate('Coupons'),   badge: coupons.length > 0 ? `${coupons.length}장` : null },
-    { key: 'payment',  Icon: CreditCard,    label: '결제수단 관리',         onPress: null },
-    { key: 'notif',    Icon: Bell,          label: '알림 설정',             onPress: null },
-    { key: 'support',  Icon: HelpCircle,    label: '고객센터',              onPress: null },
-    { key: 'faq',      Icon: FileText,      label: '자주 묻는 질문',        onPress: null },
+    { key: 'orders',      Icon: ClipboardList, label: '주문내역',             onPress: () => navigation.navigate('MyOrders'),     badge: pendingCount > 0 ? pendingCount : null },
+    { key: 'coupons',     Icon: Ticket,        label: '쿠폰함',               onPress: () => navigation.navigate('Coupons'),      badge: coupons.length > 0 ? `${coupons.length}장` : null },
+    { key: 'likedStores', Icon: Heart,         label: '관심 매장',             onPress: () => navigation.navigate('LikedStores'),  badge: likedStores.length > 0 ? `${likedStores.length}개` : null },
+    { key: 'payment',  Icon: CreditCard,    label: '결제수단 관리',         onPress: () => navigation.navigate('PaymentMethod') },
+    { key: 'notif',    Icon: Bell,          label: '알림 설정',             onPress: () => navigation.navigate('NotificationSettings') },
+    { key: 'support',  Icon: HelpCircle,    label: '고객센터',              onPress: () => navigation.navigate('Support') },
+    { key: 'faq',      Icon: FileText,      label: '자주 묻는 질문',        onPress: () => navigation.navigate('FAQ') },
     { key: 'terms',    Icon: FileText,      label: '약관 및 개인정보처리방침', onPress: () => navigation.navigate('Terms') },
   ];
 
@@ -70,8 +71,8 @@ export default function MyPageScreen({ navigation }) {
                 <Icon size={18} color={colors.charcoalBlack} />
                 <Text style={styles.menuLabel}>{item.label}</Text>
                 {item.badge != null && (
-                  <View style={[styles.menuBadge, item.key === 'coupons' && styles.menuBadgeCoupon]}>
-                    <Text style={[styles.menuBadgeText, item.key === 'coupons' && styles.menuBadgeTextCoupon]}>
+                  <View style={[styles.menuBadge, (item.key === 'coupons' || item.key === 'likedStores') && styles.menuBadgeCoupon]}>
+                    <Text style={[styles.menuBadgeText, (item.key === 'coupons' || item.key === 'likedStores') && styles.menuBadgeTextCoupon]}>
                       {item.badge}
                     </Text>
                   </View>
