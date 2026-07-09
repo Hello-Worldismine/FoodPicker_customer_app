@@ -6,6 +6,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, Navigation2, X, ChevronRight, Percent, Clock } from 'lucide-react-native';
 import { colors } from '../theme';
+// TODO: stores → GET /api/stores?lat={lat}&lng={lng}&radius={radius}&category={category}
+//       products → GET /api/products?storeId={storeId} (매장 미니카드 클릭 시)
+//       현재 위치: expo-location으로 실제 위경도 획득 후 카카오맵 SDK 또는 Google Maps 연동 필요
 import { stores, products } from '../data/mockData';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');

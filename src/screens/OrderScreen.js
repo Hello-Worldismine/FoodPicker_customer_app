@@ -17,6 +17,7 @@ function formatDate(iso) {
   return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
+// TODO: 주문 ID는 서버에서 발급받아야 합니다. 이 함수는 백엔드 연동 후 제거하세요.
 function generateOrderId() {
   const now = new Date();
   const date = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
@@ -30,6 +31,7 @@ function calcCouponDiscount(coupon, subtotal) {
   return Math.floor(subtotal * coupon.discountValue / 100);
 }
 
+// TODO: GET /api/payment-methods 로 사용자 등록 결제 수단을 불러오세요.
 const PAYMENT_METHODS = [
   { id: 'card',     label: '신용/체크카드', Icon: CreditCard },
   { id: 'kakaopay', label: '카카오페이',   Icon: Smartphone },
@@ -67,8 +69,14 @@ export default function OrderScreen({ navigation, route }) {
 
   function handlePay() {
     if (!allChecked) return;
+
+    // TODO: 아래 로컬 주문 생성 로직을 실제 결제 API 호출로 교체하세요.
+    //   1. POST /api/orders  body: { productId, qty, paymentMethod, couponId, addressId }
+    //   2. 결제 PG 연동 (토스페이먼츠, 카카오페이 등) → 결제 승인 후 주문 확정
+    //   3. 서버 응답의 order 객체를 OrderComplete 화면으로 전달
+    //   4. 쿠폰 사용 처리: PATCH /api/coupons/:couponId/use
     const order = {
-      id: generateOrderId(),
+      id: generateOrderId(), // TODO: 서버 응답의 id로 교체
       productName: product.name,
       store: product.store,
       storeAddress: product.pickupAddress,

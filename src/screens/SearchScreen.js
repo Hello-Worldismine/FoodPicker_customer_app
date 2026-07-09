@@ -20,6 +20,7 @@ const FILTER_LABELS = { distance: '거리', price: '가격', discount: '할인�
 
 const SORT_OPTIONS = ['가까운 순', '마감 임박 순', '할인율 높은 순', '낮은 가격 순'];
 
+// TODO: GET /api/search/suggestions?q={query} 로 실시간 자동완성 교체
 const SUGGESTIONS = ['크루아상', '샐러드', '도시락', '아메리카노', '샌드위치', '반찬세트', '베이글', '마감임박'];
 
 export default function SearchScreen({ navigation }) {
@@ -46,7 +47,9 @@ export default function SearchScreen({ navigation }) {
     if (!trimmed) return;
     setQuery(trimmed);
     setSearched(true);
+    // TODO: 최근 검색어를 로컬 상태 대신 AsyncStorage 또는 GET /api/users/me/search-history 로 관리
     setRecent(prev => [trimmed, ...prev.filter(s => s !== trimmed)].slice(0, 10));
+    // TODO: GET /api/search?q={trimmed}&sort={sortBy}&filters={activeFilters} 호출로 교체
   }
 
   const selling = productList.filter(

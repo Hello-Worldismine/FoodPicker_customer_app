@@ -11,7 +11,7 @@ import {
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 
-// 검색 결과 목업
+// TODO: GET /api/addresses/search?q={query} 로 교체 (카카오 주소 API 또는 도로명주소 API 연동)
 const SEARCH_RESULTS = [
   { address: '서울 강남구 테헤란로 152', detail: '강남파이낸스센터' },
   { address: '서울 강남구 테헤란로 427', detail: '위워크타워' },

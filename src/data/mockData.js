@@ -1,3 +1,18 @@
+// ──────────────────────────────────────────────────────────────
+// Mock Data — 백엔드 연동 시 교체 대상
+//
+// 이 파일의 모든 데이터는 프론트엔드 프로토타입용 임시 데이터입니다.
+// 백엔드 연동 시 각 export를 아래 API 엔드포인트로 교체하세요:
+//
+//   products      → GET /api/products
+//   stores        → GET /api/stores
+//   mockCoupons   → GET /api/coupons?available=true
+//   mockOrders    → GET /api/orders
+//   mockBannerAds → GET /api/banners
+//
+// 각 데이터의 필드 구조(스키마)는 백엔드 API 응답과 맞춰야 합니다.
+// ──────────────────────────────────────────────────────────────
+
 const now = new Date();
 
 function hoursFromNow(h) {

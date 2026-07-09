@@ -8,6 +8,7 @@ import {
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 
+// TODO: GET /api/users/me/stats 로 교체 (환경 기여 통계)
 const ENV_STATS = [
   { label: '구한 음식', value: '12개' },
   { label: '예상 절감', value: '38,000원' },
@@ -40,10 +41,12 @@ export default function MyPageScreen({ navigation }) {
             <View style={styles.avatar}>
               <User size={28} color={colors.primaryGreen} />
             </View>
+            {/* TODO: GET /api/users/me 로 사용자 이름·이메일 불러오기 */}
             <View style={{ flex: 1 }}>
               <Text style={styles.userName}>홍길동</Text>
               <Text style={styles.userEmail}>gildong@email.com</Text>
             </View>
+            {/* TODO: 프로필 편집 화면 연결 (PUT /api/users/me) */}
             <TouchableOpacity style={styles.editBtn}>
               <Text style={styles.editBtnText}>편집</Text>
             </TouchableOpacity>
@@ -85,10 +88,12 @@ export default function MyPageScreen({ navigation }) {
 
         {/* 계정 */}
         <View style={styles.accountList}>
+          {/* TODO: POST /api/auth/logout  → FCM 토큰 삭제 후 로그인 화면으로 이동 */}
           <TouchableOpacity style={[styles.menuItem, styles.menuItemBorder]}>
             <LogOut size={18} color={colors.mediumGray} />
             <Text style={[styles.menuLabel, { color: colors.mediumGray }]}>로그아웃</Text>
           </TouchableOpacity>
+          {/* TODO: DELETE /api/users/me  → 탈퇴 사유 수집 후 계정 삭제 */}
           <TouchableOpacity style={styles.menuItem}>
             <UserX size={18} color={colors.alertRed} />
             <Text style={[styles.menuLabel, { color: colors.alertRed }]}>회원탈퇴</Text>

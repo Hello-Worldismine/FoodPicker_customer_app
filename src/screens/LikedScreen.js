@@ -13,6 +13,10 @@ export default function LikedScreen({ navigation }) {
   const { productList, handleLike } = useApp();
   const likedProducts = productList.filter(p => p.liked);
 
+  // TODO: priceAlerts를 로컬 state 대신 GET /api/price-alerts 로 초기화
+  //       알림 설정: POST /api/price-alerts  body: { productId, targetPrice }
+  //       알림 해제: DELETE /api/price-alerts/:productId
+  //       가격 조건 충족 시 서버에서 FCM 푸시 알림 발송 필요
   const [priceAlerts, setPriceAlerts] = useState({});
   const [alertModal, setAlertModal] = useState(null);
   const [targetInput, setTargetInput] = useState('');

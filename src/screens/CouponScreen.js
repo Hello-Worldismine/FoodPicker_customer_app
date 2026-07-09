@@ -10,6 +10,7 @@ const TABS = [
   { key: 'used',      label: '사용 완료' },
 ];
 
+// TODO: GET /api/coupons?status=used 로 교체
 const USED_COUPONS = [
   { id: 'CPN-000', name: '첫 주문 감사 쿠폰', discountType: '정액', discountValue: 2000, minOrderAmount: 5000, endDate: '2024.05.31', usedAt: '2024.05.20' },
 ];
@@ -57,6 +58,9 @@ export default function CouponScreen({ navigation }) {
 
   function handleRegister() {
     if (!code.trim()) { setCodeError('쿠폰 코드를 입력해주세요.'); setCodeSuccess(''); return; }
+    // TODO: POST /api/coupons/register  body: { code }
+    //   성공 → AppContext의 쿠폰 목록 갱신 (GET /api/coupons 재호출)
+    //   실패 → setCodeError(서버 에러 메시지)
     setCodeError('');
     setCodeSuccess('유효하지 않은 쿠폰 코드입니다.');
     setCode('');

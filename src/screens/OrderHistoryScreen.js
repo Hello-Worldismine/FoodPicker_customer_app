@@ -21,6 +21,8 @@ const TABS = [
   { key: 'cancelled', label: '취소·환불' },
 ];
 
+// TODO: 주문 목록을 GET /api/orders?status={tab}&page={page} 로 페이지네이션 처리하세요.
+//       실시간 상태 변경(픽업 완료 등)은 WebSocket 또는 주기적 폴링으로 처리 권장.
 export default function OrderHistoryScreen({ navigation }) {
   const { orders, handleCancelOrder } = useApp();
   const [tab, setTab] = useState('pending');

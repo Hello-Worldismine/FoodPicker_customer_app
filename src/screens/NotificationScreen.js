@@ -11,6 +11,9 @@ const NOTIF_TYPES = {
   pickup:         { Icon: MapPin,      iconBg: '#FFF8E6', iconColor: colors.warmOrange, label: '픽업 안내' },
 };
 
+// TODO: mockNotifications → GET /api/notifications?page={page}
+//       읽음 처리: PATCH /api/notifications/:id/read 또는 PATCH /api/notifications/read-all
+//       FCM 푸시 수신 시 목록 자동 갱신 필요
 const mockNotifications = [
   { id: 1, type: 'pickup', title: '픽업 시간이 다가오고 있어요!', body: '그린샐러드 강남점 픽업 시간까지 30분 남았습니다. 준비해 주세요 🏃', time: new Date(Date.now() - 1000*60*15).toISOString(), read: false },
   { id: 2, type: 'order_complete', title: '결제가 완료됐어요', body: '닭가슴살 샐러드 결제가 완료됐습니다. 픽업번호: FP-1024', time: new Date(Date.now() - 1000*60*40).toISOString(), read: false },

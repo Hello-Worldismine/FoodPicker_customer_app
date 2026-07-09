@@ -72,6 +72,8 @@ export default function WriteReviewScreen({ navigation, route }) {
   const canSubmit = rating > 0 && text.trim().length >= MIN_TEXT;
 
   async function handlePickPhoto() {
+    // TODO: 선택된 이미지를 S3(또는 Firebase Storage)에 업로드 후 URL을 저장하세요.
+    //   POST /api/uploads  body: FormData(image file) → 응답: { url: '...' }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
@@ -184,6 +186,9 @@ export default function WriteReviewScreen({ navigation, route }) {
         </View>
 
         {/* 제출 */}
+        {/* TODO: 리뷰 등록 → POST /api/reviews
+              body: { orderId: order.id, rating, text, photoUrls: photos.map(p => p.url) }
+              성공 시 setSubmitted(true) 호출 */}
         <TouchableOpacity
           onPress={() => canSubmit && setSubmitted(true)}
           style={[styles.submitBtn, !canSubmit && styles.submitBtnOff]}

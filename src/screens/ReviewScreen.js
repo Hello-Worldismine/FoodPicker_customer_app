@@ -4,6 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Star, ThumbsUp, Megaphone, ChevronDown } from 'lucide-react-native';
 import { colors } from '../theme';
 
+// TODO: mockReviewData → GET /api/stores/:storeId/reviews?sort={sort}&page={page}
+//       사장님 공지 → GET /api/stores/:storeId/notice
+//       별점 분포 → 위 API 응답에 포함
 const mockReviewData = {
   1: {
     ownerNotice: '안녕하세요, 그린샐러드 강남점입니다 🥗\n매일 신선한 재료만 사용하며, 항상 최상의 품질을 약속드립니다.\n맛있게 드셨다면 리뷰 남겨주세요! 큰 힘이 됩니다 😊',

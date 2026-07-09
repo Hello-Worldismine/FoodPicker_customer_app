@@ -20,6 +20,8 @@ function formatTime(iso) {
   return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
+// TODO: 상품 상세를 GET /api/products/:productId 로 교체하세요.
+//       재고·상태는 실시간 변동이 있으므로 화면 진입 시마다 최신 데이터를 불러오세요.
 export default function ProductDetailScreen({ route, navigation }) {
   const { productId } = route.params;
   const { productList, handleLike } = useApp();

@@ -11,6 +11,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
+// TODO: stores → GET /api/stores?lat={lat}&lng={lng}&radius=3000 (현재 위치 기반 주변 매장)
+// TODO: mockBannerAds → GET /api/banners (광고 배너 목록)
 import { stores, mockBannerAds } from '../data/mockData';
 
 const CATEGORIES = [

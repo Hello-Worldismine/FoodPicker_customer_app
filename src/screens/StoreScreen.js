@@ -6,6 +6,8 @@ import {
   MapPin, Clock,
 } from 'lucide-react-native';
 import { colors } from '../theme';
+// TODO: stores → GET /api/stores/:storeId (매장 상세 정보)
+//       storeProducts → GET /api/products?storeId={storeId} (매장별 상품 목록)
 import { stores } from '../data/mockData';
 import { useApp } from '../context/AppContext';
 import ListProductCard from '../components/ListProductCard';
