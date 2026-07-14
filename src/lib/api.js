@@ -386,3 +386,23 @@ export async function markAllNotifRead() {
   const { error } = await supabase.from('buyer_notifications').update({ is_read: true }).eq('is_read', false);
   if (error) throw error;
 }
+
+// ───────── 배너 (관리자 웹에서 관리 — banners 테이블, 20260716 마이그레이션) ─────────
+// is_active=true 만 RLS 로 공개. 게시 기간(start/end_date)은 클라이언트에서 판정.
+export async function fetchActiveBanners() {
+  const { data, error } = await supabase
+    .from('banners')
+    .select('id, title, image_url, link, position, start_date, end_date')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  const today = new Date().toISOString().slice(0, 10);
+  return (data || [])
+    .filter(b => (!b.start_date || b.start_date <= today) && (!b.end_date || b.end_date >= today))
+    .map(b => ({
+      id: b.id,
+      title: b.title || '',
+      imageUrl: b.image_url || null,
+      link: b.link || '',
+      position: b.position,
+    }));
+}
