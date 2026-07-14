@@ -1,98 +1,177 @@
-import React, { createContext, useContext, useState } from 'react';
-import { products as initialProducts, mockOrders, mockCoupons } from '../data/mockData';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useAuth } from './AuthContext';
+import * as api from '../lib/api';
+import { registerForPushNotifications } from '../lib/push';
 
-// TODO: 백엔드 연동 시 이 파일의 모든 mock 데이터와 로컬 상태를
-//       실제 API 호출로 교체합니다. 각 함수마다 주석을 참고하세요.
-
-// TODO: 로그인 구현 후 INITIAL_ADDRESSES를 GET /api/users/me/addresses 로 교체
-const INITIAL_ADDRESSES = [
-  { id: 1, label: '우리집',         icon: 'home',     address: '서울 마포구 와우산로 94 신촌아이파크 101동 1502호' },
-  { id: 2, label: '회사',           icon: 'building', address: '서울 강남구 테헤란로 427 위워크타워 8층' },
-  { id: 3, label: '부모님댁',       icon: 'pin',      address: '경기 성남시 분당구 정자일로 95 파크뷰아파트 203동 1201호' },
-  { id: 4, label: '역삼동 스터디카페', icon: 'pin',   address: '서울 강남구 역삼로 168 센터빌딩 5층' },
-];
-
+// 소비자 앱 전역 상태 — Supabase 실데이터. 세션(구매자) 기준으로 로드/초기화.
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
-  // TODO: useState(initialProducts) → useEffect 내 GET /api/products 호출로 교체
-  const [productList, setProductList] = useState(initialProducts);
+  const { user } = useAuth();
+  const [productList, setProductList] = useState([]);
+  const [stores, setStores] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [coupons, setCoupons] = useState([]);
+  const [usedCoupons, setUsedCoupons] = useState([]);
+  const [priceAlerts, setPriceAlerts] = useState([]);
+  const [addresses, setAddresses] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [currentAddressId, setCurrentAddressId] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // TODO: useState(mockOrders) → useEffect 내 GET /api/orders 호출로 교체
-  const [orders, setOrders] = useState(mockOrders);
+  const reloadCatalog = useCallback(async () => {
+    const { products, stores } = await api.loadCatalog();
+    setProductList(products);
+    setStores(stores);
+  }, []);
+  const reloadOrders = useCallback(async () => { setOrders(await api.fetchMyOrders()); }, []);
+  const reloadNotifications = useCallback(async () => { setNotifications(await api.fetchNotifications()); }, []);
+  const reloadCoupons = useCallback(async () => {
+    const c = await api.fetchMyCoupons();
+    setCoupons(c.available); setUsedCoupons(c.used);
+  }, []);
 
-  // TODO: likedStores → 로그인 후 GET /api/users/me/liked-stores 로 초기화
-  const [likedStores, setLikedStores] = useState([]);
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    // 각 슬라이스를 독립적으로 로드 — 일부 실패(예: 마이그레이션 미적용)해도 나머지는 정상.
+    const settle = async (p, fallback) => {
+      try { return await p; } catch (e) { console.warn('[customer] 로드 실패:', e.message); return fallback; }
+    };
+    try {
+      const [cat, ord, cpn, addr, notif, alerts] = await Promise.all([
+        settle(api.loadCatalog(), { products: [], stores: [] }),
+        settle(api.fetchMyOrders(), []),
+        settle(api.fetchMyCoupons(), { available: [], used: [] }),
+        settle(api.fetchAddresses(), []),
+        settle(api.fetchNotifications(), []),
+        settle(api.fetchPriceAlerts(), []),
+      ]);
+      setProductList(cat.products);
+      setStores(cat.stores);
+      setOrders(ord);
+      setCoupons(cpn.available);
+      setUsedCoupons(cpn.used);
+      setAddresses(addr);
+      setNotifications(notif);
+      setPriceAlerts(alerts);
+      setCurrentAddressId(prev => prev || (addr[0] && addr[0].id) || null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  // TODO: addresses → 로그인 후 GET /api/users/me/addresses 로 초기화
-  const [addresses, setAddresses] = useState(INITIAL_ADDRESSES);
-  const [currentAddressId, setCurrentAddressId] = useState(1);
+  useEffect(() => {
+    if (user) {
+      loadAll();
+      registerForPushNotifications().catch(() => {}); // 실기기 EAS 빌드에서만 실제 등록
+    } else {
+      setProductList([]); setStores([]); setOrders([]); setCoupons([]); setUsedCoupons([]);
+      setPriceAlerts([]); setAddresses([]); setNotifications([]); setCurrentAddressId(null); setLoading(false);
+    }
+  }, [user, loadAll]);
 
-  // TODO: coupons → GET /api/coupons?available=true 로 교체
-  const coupons = mockCoupons;
+  const likedStores = stores.filter(s => s.liked).map(s => s.id);
+  const currentAddress = addresses.find(a => a.id === currentAddressId) || addresses[0] || null;
 
-  const currentAddress = addresses.find(a => a.id === currentAddressId) || addresses[0];
-
-  function handleSelectAddress(id) {
-    // TODO: PATCH /api/users/me/addresses/current  { addressId: id }
-    setCurrentAddressId(id);
-  }
-
-  function handleAddAddress(newAddr) {
-    // TODO: POST /api/users/me/addresses  body: newAddr
-    //       응답의 id(서버 발급)를 사용하도록 교체
-    const id = Date.now();
-    setAddresses(prev => [...prev, { ...newAddr, id }]);
-    setCurrentAddressId(id);
-  }
-
-  function handleDeleteAddress(id) {
-    // TODO: DELETE /api/users/me/addresses/:id
-    setAddresses(prev => prev.filter(a => a.id !== id));
-    if (currentAddressId === id) setCurrentAddressId(addresses.find(a => a.id !== id)?.id ?? null);
-  }
-
-  function handleUpdateAddress(updated) {
-    // TODO: PUT /api/users/me/addresses/:id  body: updated
-    setAddresses(prev => prev.map(a => a.id === updated.id ? { ...a, ...updated } : a));
-  }
-
+  // ── 찜(낙관적) ──
   function handleLike(productId) {
-    // TODO: POST /api/products/:productId/like  (좋아요 토글)
-    //       응답 상태에 따라 liked 값 업데이트
-    setProductList(prev =>
-      prev.map(p => p.id === productId ? { ...p, liked: !p.liked } : p)
-    );
+    const cur = productList.find(p => p.id === productId);
+    const liked = !!(cur && cur.liked);
+    setProductList(prev => prev.map(p => p.id === productId ? { ...p, liked: !liked } : p));
+    api.toggleProductFavorite(productId, liked).catch(e => { console.warn('[찜]', e.message); reloadCatalog(); });
   }
-
   function handleStoreLike(storeId) {
-    // TODO: POST /api/stores/:storeId/like  (관심 매장 토글)
-    setLikedStores(prev =>
-      prev.includes(storeId) ? prev.filter(id => id !== storeId) : [...prev, storeId]
-    );
+    const cur = stores.find(s => s.id === storeId);
+    const liked = !!(cur && cur.liked);
+    setStores(prev => prev.map(s => s.id === storeId ? { ...s, liked: !liked } : s));
+    api.toggleStoreFavorite(storeId, liked).catch(e => { console.warn('[매장찜]', e.message); reloadCatalog(); });
   }
 
-  function handleOrderComplete(order) {
-    // TODO: 주문 생성은 OrderScreen에서 POST /api/orders 로 처리 후
-    //       이 함수는 로컬 상태 갱신 또는 GET /api/orders 재호출로 교체
-    setOrders(prev => [order, ...prev]);
+  // ── 주소 ──
+  function handleSelectAddress(id) { setCurrentAddressId(id); }
+  async function handleAddAddress(newAddr) {
+    try {
+      const a = await api.addAddress(newAddr);
+      setAddresses(prev => [...prev, a]);
+      setCurrentAddressId(a.id);
+    } catch (e) { console.warn('[주소 추가]', e.message); }
+  }
+  async function handleUpdateAddress(updated) {
+    try {
+      await api.updateAddress(updated.id, updated);
+      setAddresses(prev => prev.map(a => a.id === updated.id ? { ...a, ...updated } : a));
+    } catch (e) { console.warn('[주소 수정]', e.message); }
+  }
+  async function handleDeleteAddress(id) {
+    try {
+      await api.deleteAddress(id);
+      setAddresses(prev => prev.filter(a => a.id !== id));
+      if (currentAddressId === id) setCurrentAddressId(addresses.find(a => a.id !== id)?.id ?? null);
+    } catch (e) { console.warn('[주소 삭제]', e.message); }
   }
 
-  function handleCancelOrder(orderId) {
-    // TODO: POST /api/orders/:orderId/cancel
-    setOrders(prev =>
-      prev.map(o => o.id === orderId ? { ...o, status: 'cancelled' } : o)
-    );
+  // ── 주문 ──
+  async function placeOrder(productId, quantity = 1, couponIds = []) {
+    const order = await api.createOrder(productId, quantity, couponIds); // 실패 시 throw
+    await Promise.all([reloadOrders(), reloadCatalog(), reloadCoupons()]);
+    return order;
+  }
+  async function handleCancelOrder(orderCode) {
+    await api.cancelOrder(orderCode); // 실패 시 throw
+    await Promise.all([reloadOrders(), reloadCatalog()]);
+  }
+  // 하위호환: 일부 화면이 handleOrderComplete(order) 호출 → 서버 재로딩으로 대체
+  function handleOrderComplete() { reloadOrders(); reloadCatalog(); }
+
+  // ── 리뷰 작성 ──
+  async function submitReview(orderCode, rating, content, images = []) {
+    await api.createReview(orderCode, rating, content, images); // 실패 시 throw
+    await reloadOrders();
+  }
+
+  // ── 쿠폰 등록(코드) ──
+  async function redeemCoupon(code) {
+    await api.redeemCoupon(code); // 유효하지 않으면 throw
+    await reloadCoupons();
+  }
+
+  // ── 가격 알림 ──
+  async function addPriceAlert(productId, targetPrice) {
+    const a = await api.setPriceAlert(productId, targetPrice); // 실패 시 throw
+    setPriceAlerts(prev => [...prev.filter(x => x.productId !== productId), a]);
+  }
+  async function removePriceAlert(productId) {
+    await api.removePriceAlert(productId); // 실패 시 throw
+    setPriceAlerts(prev => prev.filter(x => x.productId !== productId));
+  }
+
+  // ── 위치(GPS) ──
+  // 현재 좌표를 거리 계산 기준점으로 반영하고 카탈로그(거리) 재계산.
+  async function updateLocation(coords) {
+    if (!coords || coords.lat == null) return;
+    api.setUserLocation(coords);
+    await reloadCatalog();
+  }
+
+  // ── 알림 ──
+  function markNotificationRead(id) {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    api.markNotifRead(id).catch(() => reloadNotifications());
   }
 
   return (
     <AppContext.Provider value={{
+      loading,
       productList,
+      stores,
       orders,
       coupons,
+      usedCoupons,
+      priceAlerts,
       likedStores,
       addresses,
       currentAddress,
+      notifications,
       handleLike,
       handleStoreLike,
       handleSelectAddress,
@@ -101,6 +180,16 @@ export function AppProvider({ children }) {
       handleDeleteAddress,
       handleOrderComplete,
       handleCancelOrder,
+      placeOrder,
+      submitReview,
+      redeemCoupon,
+      addPriceAlert,
+      removePriceAlert,
+      markNotificationRead,
+      updateLocation,
+      reload: loadAll,
+      fetchProductReviews: api.fetchProductReviews,
+      fetchStoreReviews: api.fetchStoreReviews,
     }}>
       {children}
     </AppContext.Provider>

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
+import { getCurrentCoords, reverseGeocode } from '../lib/location';
 
 // TODO: GET /api/addresses/search?q={query} 로 교체 (카카오 주소 API 또는 도로명주소 API 연동)
 const SEARCH_RESULTS = [
@@ -33,6 +34,24 @@ export default function AddressScreen({ navigation }) {
   const [showResults, setShowResults] = useState(false);
   const [addModal, setAddModal] = useState(null); // { address, detail }
   const [labelInput, setLabelInput] = useState('');
+  const [locating, setLocating] = useState(false);
+
+  async function handleUseCurrentLocation() {
+    if (locating) return;
+    setLocating(true);
+    try {
+      const coords = await getCurrentCoords();
+      if (!coords) { Alert.alert('위치 권한 필요', '현재 위치를 사용하려면 위치 권한을 허용해주세요.'); return; }
+      const addr = await reverseGeocode(coords.lat, coords.lng);
+      if (!addr) { Alert.alert('주소를 찾지 못했어요', '잠시 후 다시 시도해주세요.'); return; }
+      setQuery('');
+      setShowResults(false);
+      setLabelInput('');
+      setAddModal({ address: addr, detail: '현재 위치' });
+    } finally {
+      setLocating(false);
+    }
+  }
 
   const filtered = query.trim()
     ? SEARCH_RESULTS.filter(r =>
@@ -113,10 +132,11 @@ export default function AddressScreen({ navigation }) {
         <View style={styles.resultsOverlay}>
           <TouchableOpacity
             style={styles.resultCurrentBtn}
-            onPress={() => setShowResults(false)}
+            onPress={handleUseCurrentLocation}
+            disabled={locating}
           >
-            <Navigation2 size={16} color={colors.primaryGreen} />
-            <Text style={styles.resultCurrentText}>현재 위치로 찾기</Text>
+            <Navigation2 size={16} color={locating ? colors.mediumGray : colors.primaryGreen} />
+            <Text style={styles.resultCurrentText}>{locating ? '위치 찾는 중…' : '현재 위치로 찾기'}</Text>
           </TouchableOpacity>
           {filtered.map((r, i) => (
             <TouchableOpacity
@@ -141,9 +161,9 @@ export default function AddressScreen({ navigation }) {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         {/* 현재 위치로 찾기 */}
-        <TouchableOpacity style={styles.gpsBtn}>
-          <Navigation2 size={18} color={colors.primaryGreen} />
-          <Text style={styles.gpsBtnText}>현재 위치로 찾기</Text>
+        <TouchableOpacity style={styles.gpsBtn} onPress={handleUseCurrentLocation} disabled={locating}>
+          <Navigation2 size={18} color={locating ? colors.mediumGray : colors.primaryGreen} />
+          <Text style={styles.gpsBtnText}>{locating ? '위치 찾는 중…' : '현재 위치로 찾기'}</Text>
         </TouchableOpacity>
 
         {/* 저장된 주소 목록 */}

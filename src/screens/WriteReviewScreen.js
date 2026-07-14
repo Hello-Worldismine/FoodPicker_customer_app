@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Star, Camera, X, CheckCircle } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../theme';
+import { useApp } from '../context/AppContext';
+import { uploadReviewImage } from '../lib/api';
 
 const MAX_PHOTOS = 5;
 const MIN_TEXT = 10;
@@ -64,16 +66,37 @@ const sv = StyleSheet.create({
 
 export default function WriteReviewScreen({ navigation, route }) {
   const { order } = route.params;
+  const { submitReview } = useApp();
   const [rating, setRating] = useState(0);
   const [text, setText] = useState('');
   const [photos, setPhotos] = useState([]);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const canSubmit = rating > 0 && text.trim().length >= MIN_TEXT;
 
+  async function handleSubmit() {
+    if (!canSubmit || submitting) return;
+    setSubmitting(true);
+    try {
+      // 사진은 review-images 버킷에 업로드 후 공개 URL 을 리뷰에 저장.
+      let imageUrls = [];
+      if (photos.length > 0) {
+        imageUrls = await Promise.all(photos.map(p => uploadReviewImage(p.uri)));
+      }
+      // 서버 RPC(create_review): 본인 픽업완료 주문에 한해 1회.
+      await submitReview(order.id, rating, text.trim(), imageUrls);
+      setSubmitted(true);
+    } catch (e) {
+      setSubmitting(false);
+      const msg = e.message === 'already reviewed' ? '이미 리뷰를 작성한 주문입니다.'
+        : e.message === 'order not completed' ? '픽업 완료된 주문만 리뷰를 쓸 수 있습니다.'
+        : (e.message || '리뷰 등록 중 오류가 발생했습니다.');
+      Alert.alert('리뷰 등록 실패', msg);
+    }
+  }
+
   async function handlePickPhoto() {
-    // TODO: 선택된 이미지를 S3(또는 Firebase Storage)에 업로드 후 URL을 저장하세요.
-    //   POST /api/uploads  body: FormData(image file) → 응답: { url: '...' }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
@@ -149,6 +172,7 @@ export default function WriteReviewScreen({ navigation, route }) {
             )}
             {photos.map(p => (
               <View key={p.id} style={styles.photoThumb}>
+                <Image source={{ uri: p.uri }} style={styles.photoThumbImg} />
                 <TouchableOpacity onPress={() => removePhoto(p.id)} style={styles.removePhotoBtn}>
                   <X size={11} color={colors.white} />
                 </TouchableOpacity>
@@ -185,15 +209,13 @@ export default function WriteReviewScreen({ navigation, route }) {
           )}
         </View>
 
-        {/* 제출 */}
-        {/* TODO: 리뷰 등록 → POST /api/reviews
-              body: { orderId: order.id, rating, text, photoUrls: photos.map(p => p.url) }
-              성공 시 setSubmitted(true) 호출 */}
+        {/* 제출 → 서버 RPC create_review */}
         <TouchableOpacity
-          onPress={() => canSubmit && setSubmitted(true)}
-          style={[styles.submitBtn, !canSubmit && styles.submitBtnOff]}
+          onPress={handleSubmit}
+          disabled={!canSubmit || submitting}
+          style={[styles.submitBtn, (!canSubmit || submitting) && styles.submitBtnOff]}
         >
-          <Text style={styles.submitBtnText}>리뷰 등록하기</Text>
+          <Text style={styles.submitBtnText}>{submitting ? '등록 중…' : '리뷰 등록하기'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -232,6 +254,7 @@ const styles = StyleSheet.create({
   photoThumb: {
     width: 72, height: 72, backgroundColor: colors.softGray, borderRadius: 10, position: 'relative',
   },
+  photoThumbImg: { position: 'absolute', width: '100%', height: '100%', borderRadius: 10 },
   removePhotoBtn: {
     position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: 10,
     backgroundColor: colors.charcoalBlack, alignItems: 'center', justifyContent: 'center',

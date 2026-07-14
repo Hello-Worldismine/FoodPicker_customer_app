@@ -6,9 +6,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Heart, Star, MapPin, Clock } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
-// TODO: likedStores(ID 목록)를 GET /api/users/me/liked-stores 로 교체
-//       stores 목록은 GET /api/stores?ids={id1,id2,...} 또는 개별 GET /api/stores/:id 호출
-import { stores } from '../data/mockData';
 
 const STATUS_LABEL = {
   selling: { label: '판매중', color: colors.primaryGreen, bg: '#E9F8F1' },
@@ -21,7 +18,7 @@ function fmtDist(m) {
 }
 
 export default function LikedStoresScreen({ navigation }) {
-  const { likedStores, handleStoreLike } = useApp();
+  const { stores, likedStores, handleStoreLike } = useApp();
 
   const likedList = stores.filter(s => likedStores.includes(s.id));
 

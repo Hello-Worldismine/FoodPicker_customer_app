@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ClipboardList, Ticket, Heart, CreditCard, Bell, HelpCircle, FileText,
@@ -7,6 +7,8 @@ import {
 } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
+import { deleteMyAccount } from '../lib/api';
 
 // TODO: GET /api/users/me/stats 로 교체 (환경 기여 통계)
 const ENV_STATS = [
@@ -17,6 +19,38 @@ const ENV_STATS = [
 
 export default function MyPageScreen({ navigation }) {
   const { orders, coupons, likedStores } = useApp();
+  const { user, signOut } = useAuth();
+  const displayName = user?.user_metadata?.name || '고객';
+  const displayEmail = user?.email || '';
+
+  function confirmLogout() {
+    Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      { text: '로그아웃', style: 'destructive', onPress: () => signOut() },
+    ]);
+  }
+
+  function confirmDeleteAccount() {
+    Alert.alert(
+      '회원탈퇴',
+      '탈퇴하면 계정과 찜·주문·쿠폰·알림 등 모든 데이터가 삭제되며 복구할 수 없습니다.\n정말 탈퇴하시겠습니까?',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '탈퇴하기',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteMyAccount();
+              await signOut();
+            } catch {
+              Alert.alert('탈퇴 실패', '잠시 후 다시 시도해주세요.');
+            }
+          },
+        },
+      ],
+    );
+  }
 
   const pendingCount = orders.filter(o => o.status === 'pending' || o.status === 'pickupReady').length;
 
@@ -41,15 +75,10 @@ export default function MyPageScreen({ navigation }) {
             <View style={styles.avatar}>
               <User size={28} color={colors.primaryGreen} />
             </View>
-            {/* TODO: GET /api/users/me 로 사용자 이름·이메일 불러오기 */}
             <View style={{ flex: 1 }}>
-              <Text style={styles.userName}>홍길동</Text>
-              <Text style={styles.userEmail}>gildong@email.com</Text>
+              <Text style={styles.userName}>{displayName}</Text>
+              <Text style={styles.userEmail}>{displayEmail}</Text>
             </View>
-            {/* TODO: 프로필 편집 화면 연결 (PUT /api/users/me) */}
-            <TouchableOpacity style={styles.editBtn}>
-              <Text style={styles.editBtnText}>편집</Text>
-            </TouchableOpacity>
           </View>
 
           {/* 환경 기여 통계 */}
@@ -88,13 +117,11 @@ export default function MyPageScreen({ navigation }) {
 
         {/* 계정 */}
         <View style={styles.accountList}>
-          {/* TODO: POST /api/auth/logout  → FCM 토큰 삭제 후 로그인 화면으로 이동 */}
-          <TouchableOpacity style={[styles.menuItem, styles.menuItemBorder]}>
+          <TouchableOpacity style={[styles.menuItem, styles.menuItemBorder]} onPress={confirmLogout}>
             <LogOut size={18} color={colors.mediumGray} />
             <Text style={[styles.menuLabel, { color: colors.mediumGray }]}>로그아웃</Text>
           </TouchableOpacity>
-          {/* TODO: DELETE /api/users/me  → 탈퇴 사유 수집 후 계정 삭제 */}
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity style={styles.menuItem} onPress={confirmDeleteAccount}>
             <UserX size={18} color={colors.alertRed} />
             <Text style={[styles.menuLabel, { color: colors.alertRed }]}>회원탈퇴</Text>
           </TouchableOpacity>

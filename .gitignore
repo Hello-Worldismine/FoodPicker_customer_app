@@ -42,3 +42,6 @@ yarn-error.*
 
 # Claude Code
 .claude/
+
+# Supabase 비밀값
+.env

@@ -1,29 +1,18 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Heart, Megaphone, ShoppingBag, MapPin } from 'lucide-react-native';
+import { ArrowLeft, Heart, Megaphone, ShoppingBag, MapPin, TrendingDown } from 'lucide-react-native';
 import { colors } from '../theme';
+import { useApp } from '../context/AppContext';
 
+// buyer_notifications.type(order/review/coupon/price/system) → 아이콘/라벨
 const NOTIF_TYPES = {
-  liked_closing:  { Icon: Heart,       iconBg: '#FFF0F0', iconColor: '#E53E3E', label: '찜 상품 알림' },
-  ad:             { Icon: Megaphone,   iconBg: colors.freshMint, iconColor: colors.primaryGreen, label: '이벤트/광고' },
-  order_complete: { Icon: ShoppingBag, iconBg: '#EEF2FF', iconColor: '#4F46E5', label: '결제 완료' },
-  pickup:         { Icon: MapPin,      iconBg: '#FFF8E6', iconColor: colors.warmOrange, label: '픽업 안내' },
+  order:  { Icon: ShoppingBag,  iconBg: '#EEF2FF', iconColor: '#4F46E5', label: '주문' },
+  review: { Icon: Megaphone,    iconBg: colors.freshMint, iconColor: colors.primaryGreen, label: '리뷰' },
+  coupon: { Icon: Heart,        iconBg: '#FFF0F0', iconColor: '#E53E3E', label: '쿠폰' },
+  price:  { Icon: TrendingDown, iconBg: '#FFF0F0', iconColor: colors.alertRed, label: '가격' },
+  system: { Icon: MapPin,       iconBg: '#FFF8E6', iconColor: colors.warmOrange, label: '안내' },
 };
-
-// TODO: mockNotifications → GET /api/notifications?page={page}
-//       읽음 처리: PATCH /api/notifications/:id/read 또는 PATCH /api/notifications/read-all
-//       FCM 푸시 수신 시 목록 자동 갱신 필요
-const mockNotifications = [
-  { id: 1, type: 'pickup', title: '픽업 시간이 다가오고 있어요!', body: '그린샐러드 강남점 픽업 시간까지 30분 남았습니다. 준비해 주세요 🏃', time: new Date(Date.now() - 1000*60*15).toISOString(), read: false },
-  { id: 2, type: 'order_complete', title: '결제가 완료됐어요', body: '닭가슴살 샐러드 결제가 완료됐습니다. 픽업번호: FP-1024', time: new Date(Date.now() - 1000*60*40).toISOString(), read: false },
-  { id: 3, type: 'liked_closing', title: '찜한 상품이 마감임박이에요!', body: '딸기 생크림 케이크 조각 (파리바게뜨 선릉점) — 오늘 21:30 마감, 재고 2개 남았어요.', time: new Date(Date.now() - 1000*60*90).toISOString(), read: false },
-  { id: 4, type: 'ad', title: '베이커리 특가 이벤트 🥐', body: '오늘 하루만! 베이커리 상품 전체 추가 10% 할인. 지금 바로 확인해보세요.', time: new Date(Date.now() - 1000*60*60*3).toISOString(), read: true },
-  { id: 5, type: 'liked_closing', title: '찜한 상품이 마감임박이에요!', body: '아메리카노 + 샌드위치 세트 (카페블랑 강남점) — 오늘 18:00 마감, 재고 6개.', time: new Date(Date.now() - 1000*60*60*5).toISOString(), read: true },
-  { id: 6, type: 'order_complete', title: '결제가 완료됐어요', body: '통밀 크로와상 2개입 결제가 완료됐습니다. 픽업번호: FP-1018', time: new Date(Date.now() - 1000*60*60*27).toISOString(), read: true },
-  { id: 7, type: 'pickup', title: '픽업 완료! 맛있게 드세요 😊', body: '통밀 크로와상 2개입 픽업이 확인됐습니다. 이용해 주셔서 감사합니다.', time: new Date(Date.now() - 1000*60*60*28).toISOString(), read: true },
-  { id: 8, type: 'ad', title: '주변에 새 매장이 생겼어요! 🏪', body: '강남구에 새로운 파트너 매장 자연반찬 강남점이 오픈했습니다. 첫 구매 할인 혜택을 확인해보세요.', time: new Date(Date.now() - 1000*60*60*72).toISOString(), read: true },
-];
 
 function formatTime(iso) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -47,15 +36,16 @@ function getDateGroup(iso) {
 }
 
 export default function NotificationScreen({ navigation }) {
+  const { notifications, markNotificationRead } = useApp();
   const groups = [];
   const seen = new Set();
-  mockNotifications.forEach(n => {
-    const g = getDateGroup(n.time);
+  notifications.forEach(n => {
+    const g = getDateGroup(n.createdAt);
     if (!seen.has(g)) { seen.add(g); groups.push({ label: g, items: [] }); }
     groups[groups.length - 1].items.push(n);
   });
 
-  const unreadCount = mockNotifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -76,10 +66,11 @@ export default function NotificationScreen({ navigation }) {
           <View key={group.label}>
             <Text style={styles.groupLabel}>{group.label}</Text>
             {group.items.map(notif => {
-              const typeInfo = NOTIF_TYPES[notif.type] || NOTIF_TYPES.ad;
+              const typeInfo = NOTIF_TYPES[notif.type] || NOTIF_TYPES.system;
               const Icon = typeInfo.Icon;
               return (
                 <TouchableOpacity key={notif.id} activeOpacity={0.85}
+                  onPress={() => !notif.read && markNotificationRead(notif.id)}
                   style={[styles.notifCard, !notif.read && styles.notifCardUnread]}>
                   <View style={[styles.notifIcon, { backgroundColor: typeInfo.iconBg }]}>
                     <Icon size={20} color={typeInfo.iconColor} />
@@ -90,10 +81,10 @@ export default function NotificationScreen({ navigation }) {
                       <View style={[styles.typeBadge, { backgroundColor: typeInfo.iconBg }]}>
                         <Text style={[styles.typeBadgeText, { color: typeInfo.iconColor }]}>{typeInfo.label}</Text>
                       </View>
-                      <Text style={styles.notifTime}>{formatTime(notif.time)}</Text>
+                      <Text style={styles.notifTime}>{formatTime(notif.createdAt)}</Text>
                     </View>
                     <Text style={styles.notifTitle}>{notif.title}</Text>
-                    <Text style={styles.notifBodyText}>{notif.body}</Text>
+                    <Text style={styles.notifBodyText}>{notif.message}</Text>
                   </View>
                 </TouchableOpacity>
               );
@@ -101,7 +92,7 @@ export default function NotificationScreen({ navigation }) {
           </View>
         ))}
 
-        {mockNotifications.length === 0 && (
+        {notifications.length === 0 && (
           <View style={styles.empty}>
             <Text style={styles.emptyEmoji}>🔔</Text>
             <Text style={styles.emptyText}>새로운 알림이 없습니다</Text>

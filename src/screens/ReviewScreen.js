@@ -1,75 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Star, ThumbsUp, Megaphone, ChevronDown } from 'lucide-react-native';
 import { colors } from '../theme';
-
-// TODO: mockReviewData → GET /api/stores/:storeId/reviews?sort={sort}&page={page}
-//       사장님 공지 → GET /api/stores/:storeId/notice
-//       별점 분포 → 위 API 응답에 포함
-const mockReviewData = {
-  1: {
-    ownerNotice: '안녕하세요, 그린샐러드 강남점입니다 🥗\n매일 신선한 재료만 사용하며, 항상 최상의 품질을 약속드립니다.\n맛있게 드셨다면 리뷰 남겨주세요! 큰 힘이 됩니다 😊',
-    ownerNoticeDate: '2024.05.20',
-    distribution: { 5: 98, 4: 18, 3: 5, 2: 2, 1: 1 },
-    reviews: [
-      { id: 1, user: '김민정', rating: 5, date: '2024.06.14', text: '샐러드가 정말 신선하고 맛있어요! 가성비 최고입니다. 매일 먹고 싶을 정도예요.', helpful: 8, ownerReply: '소중한 리뷰 감사해요! 앞으로도 신선하고 맛있는 샐러드로 보답하겠습니다 😊' },
-      { id: 2, user: '이준혁', rating: 5, date: '2024.06.12', text: '닭가슴살이 촉촉하고 드레싱도 맛있어요. 다이어트 중인데 딱 좋습니다.', helpful: 5, ownerReply: null },
-      { id: 3, user: '박소연', rating: 4, date: '2024.06.10', text: '신선하고 양이 충분해요. 다음에도 구매할 것 같아요.', helpful: 3, ownerReply: null },
-      { id: 4, user: '최현우', rating: 5, date: '2024.06.08', text: '픽업도 편하고 상품도 너무 좋았어요! 강추합니다.', helpful: 2, ownerReply: '방문해 주셔서 감사합니다! 또 만나요 🙏' },
-    ],
-  },
-  2: {
-    ownerNotice: '베이커리온 역삼점을 찾아주셔서 감사합니다 🥐\n매일 새벽 4시부터 직접 구운 신선한 빵을 제공합니다.\n재고 소진 시 조기 마감될 수 있으니 서둘러 주세요!',
-    ownerNoticeDate: '2024.04.10',
-    distribution: { 5: 61, 4: 20, 3: 6, 2: 1, 1: 1 },
-    reviews: [
-      { id: 1, user: '정유진', rating: 5, date: '2024.06.13', text: '크로와상이 바삭하고 버터향이 좋아요. 자주 올게요!', helpful: 12, ownerReply: '감사합니다! 매일 정성껏 굽겠습니다 🥐' },
-      { id: 2, user: '홍길동', rating: 4, date: '2024.06.11', text: '가격 대비 퀄리티가 너무 좋아요. 아침 대용으로 딱 좋습니다.', helpful: 7, ownerReply: null },
-      { id: 3, user: '김지수', rating: 5, date: '2024.06.09', text: '매일 오고 싶을 정도로 맛있어요!', helpful: 4, ownerReply: null },
-    ],
-  },
-  3: {
-    ownerNotice: '한솥도시락 강남역점입니다 🍱\n국내산 재료만 사용하여 정성껏 만들고 있습니다.\n남은 도시락은 매일 마감 2시간 전 특가로 제공됩니다.',
-    ownerNoticeDate: '2024.03.15',
-    distribution: { 5: 130, 4: 52, 3: 14, 2: 3, 1: 2 },
-    reviews: [
-      { id: 1, user: '이민수', rating: 4, date: '2024.06.14', text: '불고기 도시락이 집밥 같은 맛이에요. 반찬도 맛있고요.', helpful: 9, ownerReply: '맛있게 드셨다니 정말 기쁩니다! 감사해요 😊' },
-      { id: 2, user: '박지영', rating: 4, date: '2024.06.12', text: '양이 많고 맛있어요. 다음에 또 살게요!', helpful: 6, ownerReply: null },
-      { id: 3, user: '강민준', rating: 5, date: '2024.06.10', text: '가성비 최고! 든든하게 먹었어요.', helpful: 3, ownerReply: null },
-    ],
-  },
-  4: {
-    ownerNotice: '파리바게뜨 선릉점입니다 🍰\n매일 신선한 케이크와 빵을 선보입니다.\n푸드피커를 통해 마감 할인 상품을 저렴하게 만나보세요!',
-    ownerNoticeDate: '2024.06.01',
-    distribution: { 5: 240, 4: 55, 3: 12, 2: 3, 1: 2 },
-    reviews: [
-      { id: 1, user: '오수현', rating: 5, date: '2024.06.13', text: '딸기 케이크가 너무 맛있어요. 생크림이 달지 않아서 좋았어요!', helpful: 15, ownerReply: '소중한 후기 감사드립니다! 자주 들러주세요 🍰' },
-      { id: 2, user: '배민호', rating: 5, date: '2024.06.11', text: '할인 가격인데도 퀄리티가 훌륭해요.', helpful: 10, ownerReply: null },
-      { id: 3, user: '윤세아', rating: 4, date: '2024.06.09', text: '신선한 딸기가 듬뿍 들어있어서 좋았어요.', helpful: 5, ownerReply: null },
-    ],
-  },
-  5: {
-    ownerNotice: '자연반찬 강남점입니다 🥡\n100% 국내산 재료로 당일 생산, 당일 판매를 원칙으로 합니다.\n건강한 한 끼 부탁드립니다!',
-    ownerNoticeDate: '2024.05.05',
-    distribution: { 5: 48, 4: 14, 3: 4, 2: 1, 1: 0 },
-    reviews: [
-      { id: 1, user: '임재현', rating: 5, date: '2024.06.14', text: '두부조림이 부드럽고 맛있어요. 집밥 같은 정성이 느껴져요.', helpful: 7, ownerReply: '건강하게 드셔주셔서 감사해요! 🙏' },
-      { id: 2, user: '한예슬', rating: 4, date: '2024.06.12', text: '나물 반찬이 신선하고 맛있어요. 자주 올게요!', helpful: 4, ownerReply: null },
-    ],
-  },
-  6: {
-    ownerNotice: '카페블랑 강남점입니다 ☕\n에티오피아 스페셜티 원두로 매일 신선하게 로스팅합니다.\n음료는 픽업 시 바로 제조해드립니다. 맛있게 드세요!',
-    ownerNoticeDate: '2024.06.10',
-    distribution: { 5: 158, 4: 22, 3: 6, 2: 1, 1: 1 },
-    reviews: [
-      { id: 1, user: '조수빈', rating: 5, date: '2024.06.14', text: '아메리카노 향이 풍부하고 샌드위치도 신선해요!', helpful: 18, ownerReply: '항상 최고의 원두로 정성껏 내리겠습니다 ☕' },
-      { id: 2, user: '신동욱', rating: 5, date: '2024.06.13', text: '스페셜티 원두 쓰는 게 티가 나요. 맛이 달라요.', helpful: 11, ownerReply: null },
-      { id: 3, user: '김하늘', rating: 5, date: '2024.06.11', text: '픽업할 때 음료를 바로 만들어줘서 더 좋았어요.', helpful: 6, ownerReply: null },
-      { id: 4, user: '이도현', rating: 4, date: '2024.06.09', text: '세트 가격이 합리적이에요. 다음에도 이용할 것 같아요.', helpful: 3, ownerReply: null },
-    ],
-  },
-};
+import { useApp } from '../context/AppContext';
+import { toggleReviewHelpful, fetchMyHelpfulVotes } from '../lib/api';
 
 const SORT_OPTIONS = [
   { key: 'helpful', label: '추천순' },
@@ -101,17 +36,43 @@ const rb = StyleSheet.create({
 
 export default function ReviewScreen({ navigation, route }) {
   const { store } = route.params;
+  const { fetchStoreReviews } = useApp();
+  const [reviews, setReviews] = useState([]);
+  const [myVotes, setMyVotes] = useState(new Set());
   const [sort, setSort] = useState('helpful');
   const [showSortMenu, setShowSortMenu] = useState(false);
 
-  const data = mockReviewData[store.id] || {
-    ownerNotice: null, ownerNoticeDate: null,
-    distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
-    reviews: [],
-  };
+  useEffect(() => {
+    let mounted = true;
+    fetchStoreReviews(store.id).then(r => { if (mounted) setReviews(r); }).catch(() => {});
+    fetchMyHelpfulVotes().then(s => { if (mounted) setMyVotes(s); }).catch(() => {});
+    return () => { mounted = false; };
+  }, [store.id]);
 
-  const maxCount = Math.max(...Object.values(data.distribution));
-  const totalReviews = Object.values(data.distribution).reduce((a, b) => a + b, 0);
+  async function handleHelpful(reviewId) {
+    const voted = myVotes.has(reviewId);
+    // 낙관적 업데이트
+    setMyVotes(prev => { const n = new Set(prev); voted ? n.delete(reviewId) : n.add(reviewId); return n; });
+    setReviews(prev => prev.map(r => r.id === reviewId
+      ? { ...r, helpful: Math.max(0, r.helpful + (voted ? -1 : 1)) } : r));
+    try {
+      const res = await toggleReviewHelpful(reviewId); // { helpful_count, voted }
+      setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, helpful: res.helpful_count } : r));
+      setMyVotes(prev => { const n = new Set(prev); res.voted ? n.add(reviewId) : n.delete(reviewId); return n; });
+    } catch {
+      // 실패 시 롤백
+      setMyVotes(prev => { const n = new Set(prev); voted ? n.add(reviewId) : n.delete(reviewId); return n; });
+      setReviews(prev => prev.map(r => r.id === reviewId
+        ? { ...r, helpful: Math.max(0, r.helpful + (voted ? 1 : -1)) } : r));
+    }
+  }
+
+  const distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+  reviews.forEach(r => { distribution[r.rating] = (distribution[r.rating] || 0) + 1; });
+  const data = { ownerNotice: store.notice || null, ownerNoticeDate: null, distribution, reviews };
+
+  const maxCount = Math.max(1, ...Object.values(data.distribution));
+  const totalReviews = reviews.length;
 
   const sortedReviews = [...data.reviews].sort((a, b) => {
     if (sort === 'helpful') return b.helpful - a.helpful;
@@ -210,9 +171,21 @@ export default function ReviewScreen({ navigation, route }) {
               </View>
             </View>
             <Text style={styles.reviewText}>{review.text}</Text>
-            <TouchableOpacity style={styles.helpfulBtn}>
-              <ThumbsUp size={13} color={colors.mediumGray} />
-              <Text style={styles.helpfulText}>도움돼요 {review.helpful}</Text>
+            {review.images && review.images.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                style={styles.reviewPhotos} contentContainerStyle={{ gap: 8 }}>
+                {review.images.map((uri, i) => (
+                  <Image key={i} source={{ uri }} style={styles.reviewPhoto} />
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity
+              style={[styles.helpfulBtn, myVotes.has(review.id) && styles.helpfulBtnActive]}
+              onPress={() => handleHelpful(review.id)}
+              activeOpacity={0.7}
+            >
+              <ThumbsUp size={13} color={myVotes.has(review.id) ? colors.primaryGreen : colors.mediumGray} />
+              <Text style={[styles.helpfulText, myVotes.has(review.id) && styles.helpfulTextActive]}>도움돼요 {review.helpful}</Text>
             </TouchableOpacity>
             {review.ownerReply && (
               <View style={styles.ownerReply}>
@@ -288,6 +261,8 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 44, marginBottom: 12 },
   emptyText: { fontSize: 15, color: colors.mediumGray },
   reviewCard: { backgroundColor: colors.white, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  reviewPhotos: { marginTop: 10 },
+  reviewPhoto: { width: 96, height: 96, borderRadius: 10, backgroundColor: colors.softGray },
   reviewTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   reviewUser: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatar: {
@@ -304,7 +279,9 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.softGray, borderRadius: 8,
     paddingHorizontal: 12, paddingVertical: 5, alignSelf: 'flex-start',
   },
+  helpfulBtnActive: { borderColor: colors.primaryGreen, backgroundColor: colors.freshMint },
   helpfulText: { fontSize: 12, color: colors.mediumGray },
+  helpfulTextActive: { color: colors.primaryGreen, fontWeight: '700' },
   ownerReply: {
     marginTop: 12, backgroundColor: colors.softGray, borderRadius: 10, padding: 12,
     borderLeftWidth: 3, borderLeftColor: colors.primaryGreen,

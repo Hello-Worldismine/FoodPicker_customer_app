@@ -11,9 +11,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
-// TODO: stores → GET /api/stores?lat={lat}&lng={lng}&radius=3000 (현재 위치 기반 주변 매장)
-// TODO: mockBannerAds → GET /api/banners (광고 배너 목록)
-import { stores, mockBannerAds } from '../data/mockData';
+// 매장/상품은 Supabase(useApp)에서 로드. 배너는 마케팅 정적 콘텐츠라 그대로 사용.
+import { mockBannerAds } from '../data/mockData';
 
 const CATEGORIES = [
   { key: '전체',         emoji: '🛒', bg: '#E8F5E9' },
@@ -182,7 +181,8 @@ function StoreCard({ store, onPress }) {
 }
 
 export default function HomeScreen({ navigation }) {
-  const { handleLike, productList, currentAddress } = useApp();
+  const { handleLike, productList, stores, currentAddress, notifications } = useApp();
+  const hasUnread = notifications.some(n => !n.read);
   const [bannerIndex, setBannerIndex] = useState(0);
   const flatRef = useRef(null);
 
@@ -226,7 +226,7 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
           <TouchableOpacity style={styles.bellWrap} onPress={() => navigation.navigate('Notifications')}>
             <Bell size={22} color={colors.charcoalBlack} />
-            <View style={styles.bellDot} />
+            {hasUnread && <View style={styles.bellDot} />}
           </TouchableOpacity>
         </View>
         <TouchableOpacity style={styles.searchBar} onPress={() => navigation.navigate('Search')}>
@@ -297,7 +297,7 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.sectionTitle}>내 주변 매장</Text>
               <Text style={styles.sectionSub}>가까운 순으로 보기</Text>
             </View>
-            <TouchableOpacity style={styles.moreBtn}>
+            <TouchableOpacity style={styles.moreBtn} onPress={() => navigation.navigate('Map')}>
               <Text style={styles.moreText}>전체보기</Text>
               <ChevronRight size={14} color={colors.primaryGreen} />
             </TouchableOpacity>

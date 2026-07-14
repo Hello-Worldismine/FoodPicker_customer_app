@@ -3,18 +3,11 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, MessageCircle, Phone, Mail, Clock, ChevronRight, ExternalLink } from 'lucide-react-native';
+import { ArrowLeft, Phone, Mail, Clock, ChevronRight, ExternalLink } from 'lucide-react-native';
 import { colors } from '../theme';
 
+// 실시간 채팅 상담은 보류(챗 백엔드 미연동) → 노출하지 않음.
 const CHANNELS = [
-  {
-    Icon: MessageCircle,
-    label: '채팅 상담',
-    desc: '평균 응답 5분 이내',
-    badge: '추천',
-    badgeColor: colors.primaryGreen,
-    onPress: () => {},
-  },
   {
     Icon: Phone,
     label: '전화 상담',
@@ -31,12 +24,8 @@ const CHANNELS = [
   },
 ];
 
-const QUICK_LINKS = [
-  { label: '주문 취소 방법', onPress: () => {} },
-  { label: '픽업 시간 변경 문의', onPress: () => {} },
-  { label: '환불 처리 현황', onPress: () => {} },
-  { label: '앱 오류 신고', onPress: () => {} },
-];
+// 빠른 문의 = FAQ 주제 바로가기
+const QUICK_LINKS = ['주문 취소 방법', '픽업 시간 변경 문의', '환불 처리 현황', '앱 오류 신고'];
 
 export default function SupportScreen({ navigation }) {
   return (
@@ -93,14 +82,14 @@ export default function SupportScreen({ navigation }) {
         {/* 빠른 문의 */}
         <Text style={styles.sectionLabel}>빠른 문의</Text>
         <View style={styles.card}>
-          {QUICK_LINKS.map((item, idx) => (
+          {QUICK_LINKS.map((label, idx) => (
             <TouchableOpacity
-              key={item.label}
+              key={label}
               style={[styles.row, idx < QUICK_LINKS.length - 1 && styles.rowBorder]}
-              onPress={item.onPress}
+              onPress={() => navigation.navigate('FAQ')}
               activeOpacity={0.7}
             >
-              <Text style={styles.quickLabel}>{item.label}</Text>
+              <Text style={styles.quickLabel}>{label}</Text>
               <ExternalLink size={14} color={colors.mediumGray} />
             </TouchableOpacity>
           ))}
