@@ -1,26 +1,19 @@
 // 네이버 지도(Web Dynamic Map) — WebView 로 렌더. 시크릿 불필요(도메인 제한 방식).
-// NCP 콘솔에서 이 애플리케이션에 'Web Dynamic Map' 구독 + 아래 WEB_SERVICE_URL 을 Web 서비스 URL 로 등록해야 인증됨.
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { colors } from '../theme';
 
 const CLIENT_ID = process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID;
-// NCP 콘솔 > 애플리케이션 > Web 서비스 URL 에 등록할 값(WebView referer).
 export const NAVER_WEB_SERVICE_URL = 'https://foodpicker.app';
 
 function buildHtml({ lat, lng, zoom, markers, interactive }) {
-  const markerJs = (markers || [])
-    .map((m, i) => `
-      (function(){
-        var mk = new naver.maps.Marker({
-          position: new naver.maps.LatLng(${m.lat}, ${m.lng}),
-          map: map,
-          title: ${JSON.stringify(m.title || '')}
-        });
-        naver.maps.Event.addListener(mk, 'click', function(){ post('marker:' + ${i}); });
-      })();`)
-    .join('\n');
+  const markersJson = JSON.stringify((markers || []).map(m => ({
+    lat: m.lat,
+    lng: m.lng,
+    title: m.title || '',
+    status: m.status || 'selling',
+  })));
 
   return `<!DOCTYPE html><html><head>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
@@ -30,6 +23,8 @@ function buildHtml({ lat, lng, zoom, markers, interactive }) {
     <script>
       function post(m){ if(window.ReactNativeWebView) window.ReactNativeWebView.postMessage(m); }
       window.navermap_authFailure = function(){ post('authfail'); };
+      var MARKERS = ${markersJson};
+      var STATUS_COLOR = { selling: '#22A06B', closing: '#F97316', soldout: '#9CA3AF' };
     </script>
     <script src="https://openapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${CLIENT_ID}"></script>
     <script>
@@ -43,7 +38,21 @@ function buildHtml({ lat, lng, zoom, markers, interactive }) {
           disableDoubleTapZoom: ${!interactive},
           disableTwoFingerTapZoom: ${!interactive}
         });
-        ${markerJs}
+        naver.maps.Event.addListener(map, 'click', function(){ post('tap'); });
+        MARKERS.forEach(function(m, i) {
+          var color = STATUS_COLOR[m.status] || '#22A06B';
+          var label = (m.title || '').split(' ')[0] || '';
+          var mk = new naver.maps.Marker({
+            position: new naver.maps.LatLng(m.lat, m.lng),
+            map: map,
+            title: m.title,
+            icon: {
+              content: '<div style="background:' + color + ';color:#fff;padding:4px 9px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.25);cursor:pointer">' + label + '</div>',
+              anchor: new naver.maps.Point(0, 20)
+            }
+          });
+          naver.maps.Event.addListener(mk, 'click', function(e){ e.stop(); post('marker:' + i); });
+        });
         post('ready');
       } catch (e) { post('error:' + (e && e.message)); }
     </script>
@@ -51,12 +60,14 @@ function buildHtml({ lat, lng, zoom, markers, interactive }) {
 }
 
 export default function NaverMap({
-  lat, lng, zoom = 16, markers, interactive = true, style, onMarkerPress,
+  lat, lng, zoom = 16, markers, interactive = true, style, onMarkerPress, onMapPress,
 }) {
-  const [status, setStatus] = useState('loading'); // loading | ready | authfail | error
-  const pts = markers && markers.length ? markers : (lat != null && lng != null ? [{ lat, lng }] : []);
+  const [status, setStatus] = useState('loading');
+  // markers가 명시적으로 전달되면 그대로 사용, undefined면 중심 좌표에 단일 마커
+  const pts = markers !== undefined ? markers : (lat != null && lng != null ? [{ lat, lng }] : []);
   const html = useMemo(
     () => buildHtml({ lat, lng, zoom, markers: pts, interactive }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [lat, lng, zoom, JSON.stringify(pts), interactive],
   );
 
@@ -64,7 +75,9 @@ export default function NaverMap({
     return (
       <View style={[styles.fallback, style]}>
         <Text style={styles.fallbackText}>
-          {!CLIENT_ID ? '지도 설정이 필요합니다' : '위치 정보가 없습니다'}
+          {!CLIENT_ID
+            ? '지도 설정이 필요합니다\n(.env EXPO_PUBLIC_NAVER_MAP_CLIENT_ID)'
+            : '위치 정보가 없습니다'}
         </Text>
       </View>
     );
@@ -77,24 +90,30 @@ export default function NaverMap({
         source={{ html, baseUrl: NAVER_WEB_SERVICE_URL }}
         style={styles.web}
         scrollEnabled={false}
+        nestedScrollEnabled={false}
         javaScriptEnabled
         domStorageEnabled
         onMessage={(e) => {
           const msg = e.nativeEvent.data || '';
           if (msg === 'ready') setStatus('ready');
           else if (msg === 'authfail') setStatus('authfail');
+          else if (msg === 'tap' && onMapPress) onMapPress();
           else if (msg.startsWith('marker:') && onMarkerPress) onMarkerPress(parseInt(msg.slice(7), 10));
-          else if (msg.startsWith('error:')) setStatus('error');
+          else if (msg.startsWith('error:')) { console.warn('[NaverMap]', msg); setStatus('error'); }
         }}
       />
       {status === 'loading' && (
         <View style={styles.overlay} pointerEvents="none">
-          <ActivityIndicator color={colors.primaryGreen} />
+          <ActivityIndicator color="#fff" size="large" />
         </View>
       )}
-      {status === 'authfail' && (
+      {(status === 'authfail' || status === 'error') && (
         <View style={styles.overlay}>
-          <Text style={styles.fallbackText}>네이버 지도 인증 실패{'\n'}(NCP에 Web 서비스 URL 등록 필요)</Text>
+          <Text style={styles.fallbackText}>
+            {status === 'authfail'
+              ? '네이버 지도 인증 실패\n(NCP에 Web 서비스 URL 등록 필요)'
+              : '지도를 불러오지 못했습니다'}
+          </Text>
         </View>
       )}
     </View>
@@ -103,7 +122,7 @@ export default function NaverMap({
 
 const styles = StyleSheet.create({
   wrap: { overflow: 'hidden', backgroundColor: '#E8F4E8' },
-  web: { flex: 1, backgroundColor: 'transparent' },
+  web: { ...StyleSheet.absoluteFillObject },
   fallback: { backgroundColor: '#E8F4E8', alignItems: 'center', justifyContent: 'center' },
   overlay: {
     ...StyleSheet.absoluteFillObject,
