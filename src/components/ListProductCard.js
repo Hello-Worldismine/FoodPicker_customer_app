@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Heart, Bell, Clock, Star, MapPin } from 'lucide-react-native';
 import { colors } from '../theme';
-import { stores } from '../data/mockData';
 
 function fmtTime(iso) {
   const d = new Date(iso);
@@ -28,9 +27,8 @@ export default function ListProductCard({
   const hasAlert = alertPrice != null;
   const showRightBtns = onAlertPress !== undefined;
 
-  const storeObj = stores.find(s => s.id === product.storeId);
-  const rating = storeObj?.rating ?? 4.5;
-  const reviewCount = storeObj?.reviewCount ?? 0;
+  const rating = product.storeRating ?? 0;
+  const reviewCount = product.storeReviewCount ?? 0;
 
   return (
     <TouchableOpacity

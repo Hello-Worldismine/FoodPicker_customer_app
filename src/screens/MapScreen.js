@@ -6,10 +6,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, Navigation2, X, ChevronRight, Percent, Clock } from 'lucide-react-native';
 import { colors } from '../theme';
-// TODO: stores → GET /api/stores?lat={lat}&lng={lng}&radius={radius}&category={category}
-//       products → GET /api/products?storeId={storeId} (매장 미니카드 클릭 시)
-//       현재 위치: expo-location으로 실제 위경도 획득 후 카카오맵 SDK 또는 Google Maps 연동 필요
-import { stores, products } from '../data/mockData';
+// 매장/상품은 Supabase(useApp)에서 로드. 현재 위치는 expo-location(GPS)으로 반영.
+import { useApp } from '../context/AppContext';
+import { getCurrentCoords } from '../lib/location';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -188,10 +187,21 @@ function ClusterSheet({ cluster, onSelectStore, onClose }) {
 
 // ── 메인 화면 ─────────────────────────────────────────────
 export default function MapScreen({ navigation }) {
+  const { stores, productList, updateLocation } = useApp();
+  const products = productList;
   const [selCat, setSelCat] = useState('전체');
   const [activeFilters, setActiveFilters] = useState([]);
   const [selectedStore, setSelectedStore] = useState(null);
   const [selectedCluster, setSelectedCluster] = useState(null);
+  const [locating, setLocating] = useState(false);
+
+  async function handleMyLocation() {
+    if (locating) return;
+    setLocating(true);
+    const coords = await getCurrentCoords();
+    if (coords) await updateLocation(coords);
+    setLocating(false);
+  }
 
   function toggleFilter(key) {
     setActiveFilters(prev =>
@@ -235,10 +245,14 @@ export default function MapScreen({ navigation }) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* 검색바 */}
       <View style={styles.searchWrap}>
-        <View style={styles.searchBar}>
+        <TouchableOpacity
+          style={styles.searchBar}
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('Search')}
+        >
           <Search size={16} color={colors.mediumGray} />
           <Text style={styles.searchPlaceholder}>매장 또는 상품 검색</Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* 카테고리 필터 */}
@@ -298,14 +312,16 @@ export default function MapScreen({ navigation }) {
           onMapPress={() => { setSelectedStore(null); setSelectedCluster(null); }}
         />
 
-        {/* 현재 위치 버튼 (우하단 고정) */}
+        {/* 현재 위치 버튼 (우하단 고정) — GPS로 기준 위치·거리 갱신 */}
         <TouchableOpacity
           style={[
             styles.locationBtn,
             { bottom: (selectedStore || selectedCluster) ? 220 : 20 },
           ]}
+          onPress={handleMyLocation}
+          disabled={locating}
         >
-          <Navigation2 size={20} color={colors.primaryGreen} />
+          <Navigation2 size={20} color={locating ? colors.mediumGray : colors.primaryGreen} />
         </TouchableOpacity>
 
         {/* 클러스터 선택 시트 */}

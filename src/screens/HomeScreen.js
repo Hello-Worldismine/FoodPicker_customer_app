@@ -11,9 +11,10 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
-// TODO: stores → GET /api/stores?lat={lat}&lng={lng}&radius=3000 (현재 위치 기반 주변 매장)
-// TODO: mockBannerAds → GET /api/banners (광고 배너 목록)
-import { stores, mockBannerAds } from '../data/mockData';
+// 매장/상품은 Supabase(useApp)에서 로드.
+// 배너: 관리자 웹이 등록한 이미지 배너(banners 테이블)가 있으면 우선 노출, 없으면 정적 카드 폴백.
+import { mockBannerAds } from '../data/mockData';
+import { fetchActiveBanners } from '../lib/api';
 
 const CATEGORIES = [
   { key: '전체',         emoji: '🛒', bg: '#E8F5E9' },
@@ -182,21 +183,40 @@ function StoreCard({ store, onPress }) {
 }
 
 export default function HomeScreen({ navigation }) {
-  const { handleLike, productList, currentAddress } = useApp();
+  const { handleLike, productList, stores, currentAddress, notifications } = useApp();
+  const hasUnread = notifications.some(n => !n.read);
   const [bannerIndex, setBannerIndex] = useState(0);
+  const [dbBanners, setDbBanners] = useState([]);
   const flatRef = useRef(null);
 
   useEffect(() => {
-    if (mockBannerAds.length <= 1) return;
+    let cancelled = false;
+    fetchActiveBanners()
+      .then(rows => { if (!cancelled) setDbBanners(rows.filter(b => b.imageUrl)); })
+      .catch(() => {}); // 테이블 미생성/네트워크 실패 시 정적 배너 폴백
+    return () => { cancelled = true; };
+  }, []);
+
+  // 관리자 등록 이미지 배너가 있으면 그것만, 없으면 기존 정적 그라디언트 카드
+  const banners = dbBanners.length > 0 ? dbBanners : mockBannerAds;
+
+  useEffect(() => {
+    if (banners.length <= 1) return;
     const timer = setInterval(() => {
       setBannerIndex(prev => {
-        const next = (prev + 1) % mockBannerAds.length;
+        const next = (prev + 1) % banners.length;
         flatRef.current?.scrollToOffset({ offset: next * SCREEN_W, animated: true });
         return next;
       });
     }, 3000);
     return () => clearInterval(timer);
-  }, []);
+  }, [banners.length]);
+
+  // 배너 link('/category/빵' 형태)에서 카테고리 이동 대상 추출
+  function bannerCategory(link) {
+    const m = /\/category\/(.+)$/.exec(link || '');
+    return m ? decodeURIComponent(m[1]) : '전체';
+  }
 
   const nearbyStores = [...stores].sort((a, b) => a.distance - b.distance);
 
@@ -226,7 +246,7 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
           <TouchableOpacity style={styles.bellWrap} onPress={() => navigation.navigate('Notifications')}>
             <Bell size={22} color={colors.charcoalBlack} />
-            <View style={styles.bellDot} />
+            {hasUnread && <View style={styles.bellDot} />}
           </TouchableOpacity>
         </View>
         <TouchableOpacity style={styles.searchBar} onPress={() => navigation.navigate('Search')}>
@@ -241,7 +261,7 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.bannerWrap}>
           <FlatList
             ref={flatRef}
-            data={mockBannerAds}
+            data={banners}
             keyExtractor={i => String(i.id)}
             horizontal pagingEnabled
             showsHorizontalScrollIndicator={false}
@@ -249,23 +269,29 @@ export default function HomeScreen({ navigation }) {
             onMomentumScrollEnd={e => setBannerIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W))}
             renderItem={({ item }) => (
               <View style={{ width: SCREEN_W, paddingHorizontal: 16 }}>
-                <LinearGradient colors={item.bg} style={styles.banner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                  <View style={styles.bannerCircle1} />
-                  <View style={styles.bannerCircle2} />
-                  <View style={styles.bannerContent}>
-                    <Text style={styles.bannerTitle}>{item.title}</Text>
-                    <Text style={styles.bannerDesc}>{item.description}</Text>
-                    <TouchableOpacity style={styles.bannerBtn} onPress={() => goCategory(item.category)}>
-                      <Text style={styles.bannerBtnText}>{item.btnLabel}</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.bannerEmoji}>{item.emoji}</Text>
-                </LinearGradient>
+                {item.imageUrl ? (
+                  <TouchableOpacity activeOpacity={0.85} onPress={() => goCategory(bannerCategory(item.link))}>
+                    <Image source={{ uri: item.imageUrl }} style={styles.banner} resizeMode="cover" />
+                  </TouchableOpacity>
+                ) : (
+                  <LinearGradient colors={item.bg} style={styles.banner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                    <View style={styles.bannerCircle1} />
+                    <View style={styles.bannerCircle2} />
+                    <View style={styles.bannerContent}>
+                      <Text style={styles.bannerTitle}>{item.title}</Text>
+                      <Text style={styles.bannerDesc}>{item.description}</Text>
+                      <TouchableOpacity style={styles.bannerBtn} onPress={() => goCategory(item.category)}>
+                        <Text style={styles.bannerBtnText}>{item.btnLabel}</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={styles.bannerEmoji}>{item.emoji}</Text>
+                  </LinearGradient>
+                )}
               </View>
             )}
           />
           <View style={styles.indicators}>
-            {mockBannerAds.map((_, i) => (
+            {banners.map((_, i) => (
               <View key={i} style={[styles.dot, i === bannerIndex && styles.dotActive]} />
             ))}
           </View>
@@ -297,7 +323,7 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.sectionTitle}>내 주변 매장</Text>
               <Text style={styles.sectionSub}>가까운 순으로 보기</Text>
             </View>
-            <TouchableOpacity style={styles.moreBtn}>
+            <TouchableOpacity style={styles.moreBtn} onPress={() => navigation.navigate('Map')}>
               <Text style={styles.moreText}>전체보기</Text>
               <ChevronRight size={14} color={colors.primaryGreen} />
             </TouchableOpacity>

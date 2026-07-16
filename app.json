@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#22A06B"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.foodpicker.userapp",
@@ -26,16 +28,19 @@
     "android": {
       "package": "com.foodpicker.userapp",
       "versionCode": 1,
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png"
       },
       "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "CAMERA"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -48,12 +53,25 @@
           "photosPermission": "리뷰 사진 첨부를 위해 사진 라이브러리 접근이 필요합니다.",
           "cameraPermission": "리뷰 사진 촬영을 위해 카메라 접근이 필요합니다."
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "가까운 매장과 거리를 표시하기 위해 위치 정보가 필요합니다."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#22A06B"
+        }
       ]
     ],
     "extra": {
       "eas": {
-        "projectId": "foodpicker-userapp"
+        "projectId": "929e1cfd-422e-4a63-879e-72dc2a88899a"
       }
-    }
+    },
+    "owner": "dongsik-kim"
   }
 }

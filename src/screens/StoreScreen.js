@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking, Image, Share, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ArrowLeft, Share2, Heart, Star, Navigation, Phone, MessageSquare,
-  MapPin, Clock,
+  MapPin, Clock, Ticket,
 } from 'lucide-react-native';
 import { colors } from '../theme';
-// TODO: stores → GET /api/stores/:storeId (매장 상세 정보)
-//       storeProducts → GET /api/products?storeId={storeId} (매장별 상품 목록)
-import { stores } from '../data/mockData';
+// 매장/상품은 Supabase(useApp)에서 로드.
 import { useApp } from '../context/AppContext';
+import { openDirections, openInMaps } from '../lib/maps';
+import { fetchStoreCoupons, claimCoupon } from '../lib/api';
 import ListProductCard from '../components/ListProductCard';
+import NaverMap from '../components/NaverMap';
 
 const STATUS_COLOR = {
   selling: colors.primaryGreen,
@@ -20,12 +21,46 @@ const STATUS_COLOR = {
 
 export default function StoreScreen({ route, navigation }) {
   const { storeId } = route.params;
-  const { productList, handleLike, likedStores, handleStoreLike } = useApp();
+  const { productList, stores, handleLike, likedStores, handleStoreLike, coupons, usedCoupons, reload } = useApp();
   const isLiked = likedStores.includes(storeId);
   const store = stores.find(s => s.id === storeId);
   const [tab, setTab] = useState('products');
+  const [storeCoupons, setStoreCoupons] = useState([]);
+  const [claiming, setClaiming] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetchStoreCoupons(storeId).then(cs => { if (alive) setStoreCoupons(cs); }).catch(() => {});
+    return () => { alive = false; };
+  }, [storeId]);
+
+  const ownedCouponIds = new Set(
+    [...(coupons || []), ...(usedCoupons || [])].map(c => c.couponId).filter(Boolean),
+  );
+
+  async function handleClaim(c) {
+    if (claiming) return;
+    setClaiming(c.couponId);
+    try {
+      await claimCoupon(c.couponId);
+      await reload();
+      Alert.alert('쿠폰 발급', `${c.name} 쿠폰을 받았습니다.`);
+    } catch (e) {
+      Alert.alert('발급 실패', e.message || '잠시 후 다시 시도해주세요.');
+    } finally {
+      setClaiming(null);
+    }
+  }
 
   if (!store) return null;
+
+  function handleShare() {
+    if (!store) return;
+    const parts = [`${store.name} — FoodPicker`];
+    if (store.address) parts.push(store.address);
+    parts.push('마감 임박 할인 상품을 픽업으로 만나보세요!');
+    Share.share({ message: parts.join('\n') }).catch(() => {});
+  }
 
   const storeProducts = productList.filter(p => p.storeId === storeId);
   const availableProducts = storeProducts.filter(
@@ -56,7 +91,7 @@ export default function StoreScreen({ route, navigation }) {
                   fill={isLiked ? colors.white : 'none'}
                 />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.navBtn}>
+              <TouchableOpacity style={styles.navBtn} onPress={handleShare}>
                 <Share2 size={18} color={colors.white} />
               </TouchableOpacity>
             </View>
@@ -96,7 +131,10 @@ export default function StoreScreen({ route, navigation }) {
 
       {/* 액션 버튼 3개 — 웹과 동일한 열(column) 레이아웃 */}
       <View style={styles.actionRow}>
-        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.freshMint }]}>
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: colors.freshMint }]}
+          onPress={() => openDirections({ lat: store.lat, lng: store.lng, address: store.address, label: store.name })}
+        >
           <Navigation size={18} color={colors.primaryGreen} />
           <Text style={[styles.actionLabel, { color: colors.primaryGreen }]}>길찾기</Text>
         </TouchableOpacity>
@@ -117,6 +155,43 @@ export default function StoreScreen({ route, navigation }) {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
+        {/* 매장 전용 쿠폰 (점주 발행) */}
+        {storeCoupons.length > 0 && (
+          <View style={styles.couponSection}>
+            <View style={styles.couponSectionHeader}>
+              <Ticket size={15} color={colors.primaryGreen} />
+              <Text style={styles.couponSectionTitle}>매장 쿠폰</Text>
+            </View>
+            {storeCoupons.map(c => {
+              const owned = ownedCouponIds.has(c.couponId);
+              return (
+                <View key={c.couponId} style={styles.storeCouponCard}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.storeCouponDiscount}>
+                      {c.discountType === '정액'
+                        ? `${c.discountValue.toLocaleString()}원 할인`
+                        : `${c.discountValue}% 할인${c.maxDiscountAmount ? ` (최대 ${c.maxDiscountAmount.toLocaleString()}원)` : ''}`}
+                    </Text>
+                    <Text style={styles.storeCouponName} numberOfLines={1}>{c.name}</Text>
+                    <Text style={styles.storeCouponMeta}>
+                      최소 {c.minOrderAmount.toLocaleString()}원{c.endDate ? ` · ~${c.endDate}` : ''}{c.allowStacking ? ' · 중복가능' : ''}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.claimBtn, owned && styles.claimBtnDone]}
+                    disabled={owned || claiming === c.couponId}
+                    onPress={() => handleClaim(c)}
+                  >
+                    <Text style={[styles.claimText, owned && styles.claimTextDone]}>
+                      {owned ? '받음' : claiming === c.couponId ? '…' : '받기'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
         {/* 매장 기본 정보 */}
         <View style={styles.infoCard}>
           {[
@@ -192,7 +267,7 @@ export default function StoreScreen({ route, navigation }) {
                     <ListProductCard
                       key={p.id}
                       product={p}
-                      onPress={() => {}}
+                      onPress={pr => navigation.navigate('ProductDetail', { productId: pr.id })}
                       onLike={handleLike}
                     />
                   ))}
@@ -210,22 +285,39 @@ export default function StoreScreen({ route, navigation }) {
                 </View>
               ) : null}
 
-              {/* 지도 플레이스홀더 */}
-              <View style={styles.mapPlaceholder}>
-                <MapGrid />
-                <View style={{ zIndex: 1, alignItems: 'center' }}>
-                  <Text style={{ fontSize: 28 }}>📍</Text>
-                  <View style={styles.mapLabel}>
-                    <Text style={styles.mapLabelText}>{store.name}</Text>
+              {/* 네이버 지도 (좌표 있으면 실지도, 없으면 탭하여 외부 지도) */}
+              {store.lat != null && store.lng != null ? (
+                <NaverMap
+                  lat={store.lat}
+                  lng={store.lng}
+                  markers={[{ lat: store.lat, lng: store.lng, title: store.name }]}
+                  style={styles.mapPlaceholder}
+                />
+              ) : (
+                <TouchableOpacity
+                  style={styles.mapPlaceholder}
+                  activeOpacity={0.85}
+                  onPress={() => openInMaps({ address: store.address, label: store.name })}
+                >
+                  <MapGrid />
+                  <View style={{ zIndex: 1, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 28 }}>📍</Text>
+                    <View style={styles.mapLabel}>
+                      <Text style={styles.mapLabelText}>{store.name}</Text>
+                    </View>
+                    <Text style={styles.mapTapHint}>탭하여 지도 보기</Text>
                   </View>
-                </View>
-              </View>
+                </TouchableOpacity>
+              )}
 
               {/* 상세 주소 + 길찾기 */}
               <View style={styles.addressCard}>
                 <Text style={styles.addressTitle}>상세 주소</Text>
                 <Text style={styles.addressText}>{store.address}</Text>
-                <TouchableOpacity style={styles.dirBtn}>
+                <TouchableOpacity
+                  style={styles.dirBtn}
+                  onPress={() => openDirections({ lat: store.lat, lng: store.lng, address: store.address, label: store.name })}
+                >
                   <Navigation size={15} color={colors.primaryGreen} />
                   <Text style={styles.dirBtnText}>길찾기</Text>
                 </TouchableOpacity>
@@ -305,6 +397,20 @@ const styles = StyleSheet.create({
   actionLabel: { fontSize: 12, fontWeight: '600' },
 
   /* 정보 카드 */
+  couponSection: { backgroundColor: colors.white, marginBottom: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 },
+  couponSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  couponSectionTitle: { fontSize: 14, fontWeight: '800', color: colors.charcoalBlack },
+  storeCouponCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: colors.freshMint, borderRadius: 12, padding: 12, marginBottom: 8,
+  },
+  storeCouponDiscount: { fontSize: 15, fontWeight: '900', color: colors.primaryGreen },
+  storeCouponName: { fontSize: 13, fontWeight: '600', color: colors.charcoalBlack, marginTop: 2 },
+  storeCouponMeta: { fontSize: 11, color: colors.mediumGray, marginTop: 3 },
+  claimBtn: { backgroundColor: colors.primaryGreen, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8, flexShrink: 0 },
+  claimBtnDone: { backgroundColor: '#E0E0E0' },
+  claimText: { fontSize: 13, fontWeight: '800', color: colors.white },
+  claimTextDone: { color: colors.mediumGray },
   infoCard: { backgroundColor: colors.white, marginBottom: 8, paddingHorizontal: 16, paddingVertical: 4 },
   infoRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 9 },
   infoRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.softGray },
@@ -359,6 +465,7 @@ const styles = StyleSheet.create({
     borderRadius: 8, paddingHorizontal: 12, paddingVertical: 5,
   },
   mapLabelText: { fontSize: 12, fontWeight: '700', color: colors.white },
+  mapTapHint: { fontSize: 11, color: '#5A7A5A', fontWeight: '600', marginTop: 8 },
 
   addressCard: {
     backgroundColor: colors.white, borderRadius: 12, padding: 16, marginBottom: 12,

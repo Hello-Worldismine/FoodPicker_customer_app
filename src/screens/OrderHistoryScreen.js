@@ -4,8 +4,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { QrCode, Clock, MapPin, Star, Navigation } from 'lucide-react-native';
+import QRCode from 'react-native-qrcode-svg';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
+import { openDirections, openInMaps } from '../lib/maps';
 
 const STATUS = {
   pickupReady: { label: '픽업 대기', color: colors.primaryGreen, bg: colors.freshMint },
@@ -101,14 +103,21 @@ export default function OrderHistoryScreen({ navigation }) {
                         <Text style={styles.storeRowAddrText}>{order.storeAddress}</Text>
                       </View>
                     </View>
-                    <TouchableOpacity style={styles.navBtn}>
+                    <TouchableOpacity
+                      style={styles.navBtn}
+                      onPress={() => openDirections({ address: order.storeAddress, label: order.store })}
+                    >
                       <Navigation size={13} color={colors.primaryGreen} />
                       <Text style={styles.navBtnText}>길찾기</Text>
                     </TouchableOpacity>
                   </View>
 
-                  {/* 지도 플레이스홀더 */}
-                  <View style={styles.mapPlaceholder}>
+                  {/* 지도 (탭하면 외부 지도앱에서 매장 위치 표시) */}
+                  <TouchableOpacity
+                    style={styles.mapPlaceholder}
+                    activeOpacity={0.85}
+                    onPress={() => openInMaps({ address: order.storeAddress, label: order.store })}
+                  >
                     <MapGrid />
                     <View style={styles.mapPinWrap}>
                       <View style={styles.mapPinCircle}>
@@ -116,8 +125,8 @@ export default function OrderHistoryScreen({ navigation }) {
                       </View>
                       <View style={styles.mapPinShadow} />
                     </View>
-                    <Text style={styles.mapLabel}>지도 준비 중</Text>
-                  </View>
+                    <Text style={styles.mapLabel}>탭하여 지도 보기</Text>
+                  </TouchableOpacity>
 
                   {/* QR + 취소 버튼 */}
                   <View style={styles.actionRow}>
@@ -154,7 +163,9 @@ export default function OrderHistoryScreen({ navigation }) {
             <Text style={styles.qrModalTitle}>픽업 QR코드</Text>
             <Text style={styles.qrModalStore}>{showQR?.store}</Text>
             <View style={styles.qrBox}>
-              <QrCode size={100} color={colors.charcoalBlack} />
+              {showQR?.id
+                ? <QRCode value={showQR.id} size={150} backgroundColor="transparent" color={colors.charcoalBlack} />
+                : <QrCode size={100} color={colors.charcoalBlack} />}
               <Text style={styles.qrId}>{showQR?.id}</Text>
             </View>
             <Text style={styles.qrTime}>픽업 시간: {showQR?.pickupTime}</Text>

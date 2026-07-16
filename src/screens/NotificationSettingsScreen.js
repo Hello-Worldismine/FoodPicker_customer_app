@@ -1,10 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ArrowLeft, Bell, Tag, Clock, TrendingDown, Megaphone } from 'lucide-react-native';
 import { colors } from '../theme';
+
+const STORAGE_KEY = 'notif_settings';
+const DEFAULTS = {
+  pickupReady: true, pickupRemind: true, closingSoon: true,
+  priceDrop: false, newProduct: false, marketing: false,
+};
 
 const SETTINGS = [
   {
@@ -31,20 +38,25 @@ const SETTINGS = [
 ];
 
 export default function NotificationSettingsScreen({ navigation }) {
-  const [enabled, setEnabled] = useState({
-    pickupReady: true,
-    pickupRemind: true,
-    closingSoon: true,
-    priceDrop: false,
-    newProduct: false,
-    marketing: false,
-  });
+  const [enabled, setEnabled] = useState(DEFAULTS);
+
+  // 저장된 설정 불러오기(기기 로컬 영속).
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then(v => { if (v) { try { setEnabled(e => ({ ...e, ...JSON.parse(v) })); } catch {} } })
+      .catch(() => {});
+  }, []);
+
+  function persist(next) {
+    setEnabled(next);
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+  }
 
   const allOn = Object.values(enabled).every(Boolean);
 
   function toggleAll() {
     const next = !allOn;
-    setEnabled(prev => Object.fromEntries(Object.keys(prev).map(k => [k, next])));
+    persist(Object.fromEntries(Object.keys(enabled).map(k => [k, next])));
   }
 
   return (
@@ -90,7 +102,7 @@ export default function NotificationSettingsScreen({ navigation }) {
                     </View>
                     <Switch
                       value={enabled[item.key]}
-                      onValueChange={v => setEnabled(prev => ({ ...prev, [item.key]: v }))}
+                      onValueChange={v => persist({ ...enabled, [item.key]: v })}
                       trackColor={{ false: '#E0E0E0', true: colors.primaryGreen }}
                       thumbColor={colors.white}
                     />

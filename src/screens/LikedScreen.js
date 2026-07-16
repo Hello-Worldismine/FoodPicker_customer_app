@@ -10,25 +10,25 @@ import { useApp } from '../context/AppContext';
 import ListProductCard from '../components/ListProductCard';
 
 export default function LikedScreen({ navigation }) {
-  const { productList, handleLike } = useApp();
+  const { productList, handleLike, priceAlerts: alertList, addPriceAlert, removePriceAlert } = useApp();
   const likedProducts = productList.filter(p => p.liked);
 
-  // TODO: priceAlerts를 로컬 state 대신 GET /api/price-alerts 로 초기화
-  //       알림 설정: POST /api/price-alerts  body: { productId, targetPrice }
-  //       알림 해제: DELETE /api/price-alerts/:productId
-  //       가격 조건 충족 시 서버에서 FCM 푸시 알림 발송 필요
-  const [priceAlerts, setPriceAlerts] = useState({});
+  // 목표가 알림은 Supabase(price_alerts)에 저장 — 목표가 도달 시 서버 크론이 알림 생성.
+  const alertMap = {};
+  (alertList || []).forEach(a => { alertMap[a.productId] = a.targetPrice; });
+
   const [alertModal, setAlertModal] = useState(null);
   const [targetInput, setTargetInput] = useState('');
   const [inputError, setInputError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   function openAlertModal(product) {
-    setTargetInput(priceAlerts[product.id] ? String(priceAlerts[product.id]) : '');
+    setTargetInput(alertMap[product.id] ? String(alertMap[product.id]) : '');
     setInputError('');
     setAlertModal(product);
   }
 
-  function handleSetAlert() {
+  async function handleSetAlert() {
     const product = alertModal;
     const value = parseInt(targetInput.replace(/[^0-9]/g, ''), 10);
     if (!value || value <= 0) {
@@ -39,17 +39,30 @@ export default function LikedScreen({ navigation }) {
       setInputError(`현재가(${product.salePrice.toLocaleString()}원)보다 낮게 입력해주세요.`);
       return;
     }
-    setPriceAlerts(prev => ({ ...prev, [product.id]: value }));
-    setAlertModal(null);
+    if (saving) return;
+    setSaving(true);
+    try {
+      await addPriceAlert(product.id, value);
+      setAlertModal(null);
+    } catch {
+      setInputError('알림 설정에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function handleRemoveAlert() {
-    setPriceAlerts(prev => {
-      const next = { ...prev };
-      delete next[alertModal.id];
-      return next;
-    });
-    setAlertModal(null);
+  async function handleRemoveAlert() {
+    const id = alertModal.id;
+    if (saving) return;
+    setSaving(true);
+    try {
+      await removePriceAlert(id);
+      setAlertModal(null);
+    } catch {
+      setInputError('알림 해제에 실패했습니다.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -82,7 +95,7 @@ export default function LikedScreen({ navigation }) {
               onPress={() => navigation.navigate('ProductDetail', { productId: p.id })}
               onLike={handleLike}
               onStorePress={storeId => navigation.navigate('Store', { storeId })}
-              alertPrice={priceAlerts[p.id]}
+              alertPrice={alertMap[p.id]}
               onAlertPress={() => openAlertModal(p)}
             />
           ))
@@ -137,7 +150,7 @@ export default function LikedScreen({ navigation }) {
                     <Check size={16} color={colors.white} />
                     <Text style={styles.confirmBtnText}>알림 설정 완료</Text>
                   </TouchableOpacity>
-                  {priceAlerts[alertModal.id] != null && (
+                  {alertMap[alertModal.id] != null && (
                     <TouchableOpacity style={styles.removeBtn} onPress={handleRemoveAlert}>
                       <BellOff size={14} color={colors.mediumGray} />
                       <Text style={styles.removeBtnText}>알림 해제</Text>

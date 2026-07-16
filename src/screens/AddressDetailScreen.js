@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Home, Building2, MapPin, Search, X, Navigation2 } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
+import { getCurrentCoords, reverseGeocode } from '../lib/location';
 
 const LABEL_PRESETS = [
   { key: 'home',     Icon: Home,      label: '우리집',   icon: 'home' },
@@ -54,6 +55,22 @@ export default function AddressDetailScreen({ route, navigation }) {
   const [currentAddr, setCurrentAddr] = useState(address.address);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  const [locating, setLocating] = useState(false);
+
+  async function handleUseCurrentLocation() {
+    if (locating) return;
+    setLocating(true);
+    const coords = await getCurrentCoords();
+    if (coords) {
+      const addr = await reverseGeocode(coords.lat, coords.lng);
+      if (addr) {
+        setCurrentAddr(addr);
+        setShowSearch(false);
+        setSearchQuery('');
+      }
+    }
+    setLocating(false);
+  }
 
   const filteredResults = searchQuery.trim()
     ? SEARCH_RESULTS.filter(r =>
@@ -132,9 +149,9 @@ export default function AddressDetailScreen({ route, navigation }) {
               )}
             </View>
 
-            <TouchableOpacity style={styles.gpsRow}>
-              <Navigation2 size={15} color={colors.primaryGreen} />
-              <Text style={styles.gpsText}>현재 위치로 찾기</Text>
+            <TouchableOpacity style={styles.gpsRow} onPress={handleUseCurrentLocation} disabled={locating}>
+              <Navigation2 size={15} color={locating ? colors.mediumGray : colors.primaryGreen} />
+              <Text style={styles.gpsText}>{locating ? '위치 찾는 중…' : '현재 위치로 찾기'}</Text>
             </TouchableOpacity>
 
             {filteredResults.map((r, i) => (

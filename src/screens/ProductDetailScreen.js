@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Image,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Image, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -9,6 +9,9 @@ import {
 } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
+import { fetchPriceHistory } from '../lib/api';
+import { openInMaps } from '../lib/maps';
+import NaverMap from '../components/NaverMap';
 
 function formatDate(iso) {
   const d = new Date(iso);
@@ -28,6 +31,13 @@ export default function ProductDetailScreen({ route, navigation }) {
   const product = productList.find(p => p.id === productId);
   const [qty, setQty] = useState(1);
   const [expandedSection, setExpandedSection] = useState(null);
+  const [priceHistory, setPriceHistory] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetchPriceHistory(productId).then(h => { if (alive) setPriceHistory(h); }).catch(() => {});
+    return () => { alive = false; };
+  }, [productId]);
 
   if (!product) return null;
 
@@ -41,6 +51,15 @@ export default function ProductDetailScreen({ route, navigation }) {
   let btnDisabled = false;
   if (isSoldout) { btnLabel = '품절된 상품입니다'; btnDisabled = true; }
   if (isPickupEnded || isExpired) { btnLabel = '판매가 종료되었습니다'; btnDisabled = true; }
+
+  function handleShare() {
+    const msg = [
+      `${product.name} — ${product.store}`,
+      `${product.salePrice.toLocaleString()}원 (정가 ${product.originalPrice.toLocaleString()}원 · ${product.discountRate}% 할인)`,
+      'FoodPicker에서 마감 임박 할인 상품을 픽업으로 만나보세요!',
+    ].join('\n');
+    Share.share({ message: msg }).catch(() => {});
+  }
 
   const sections = [
     { key: 'composition', label: '상품 구성', content: product.composition },
@@ -70,7 +89,7 @@ export default function ProductDetailScreen({ route, navigation }) {
               <ArrowLeft size={20} color={colors.charcoalBlack} />
             </TouchableOpacity>
             <View style={styles.imageHeaderRight}>
-              <TouchableOpacity style={styles.imageBtn}>
+              <TouchableOpacity style={styles.imageBtn} onPress={handleShare}>
                 <Share2 size={18} color={colors.charcoalBlack} />
               </TouchableOpacity>
               <TouchableOpacity style={styles.imageBtn} onPress={() => handleLike(product.id)}>
@@ -131,8 +150,8 @@ export default function ProductDetailScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* 가격 흐름 카드 */}
-        <PriceFlowCard product={product} />
+        {/* 가격 흐름 카드 (실제 product_price_history 기반) */}
+        <PriceFlowCard product={product} history={priceHistory} />
 
         {/* 정보 그리드 카드 */}
         <View style={styles.card}>
@@ -167,18 +186,32 @@ export default function ProductDetailScreen({ route, navigation }) {
           ))}
         </View>
 
-        {/* 픽업 장소 지도 */}
+        {/* 픽업 장소 — 네이버 지도(좌표 있으면 실지도, 없으면 탭하여 외부 지도) */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>픽업 장소</Text>
-          <View style={styles.mapPlaceholder}>
-            <MapGrid />
-            <View style={{ zIndex: 1, alignItems: 'center' }}>
-              <Text style={{ fontSize: 28 }}>📍</Text>
-              <View style={styles.mapLabel}>
-                <Text style={styles.mapLabelText}>{product.store}</Text>
+          {product.lat != null && product.lng != null ? (
+            <NaverMap
+              lat={product.lat}
+              lng={product.lng}
+              markers={[{ lat: product.lat, lng: product.lng, title: product.store }]}
+              style={styles.mapPlaceholder}
+            />
+          ) : (
+            <TouchableOpacity
+              style={styles.mapPlaceholder}
+              activeOpacity={0.85}
+              onPress={() => openInMaps({ address: product.pickupAddress, label: product.store })}
+            >
+              <MapGrid />
+              <View style={{ zIndex: 1, alignItems: 'center' }}>
+                <Text style={{ fontSize: 28 }}>📍</Text>
+                <View style={styles.mapLabel}>
+                  <Text style={styles.mapLabelText}>{product.store}</Text>
+                </View>
+                <Text style={styles.mapTapHint}>탭하여 지도 보기</Text>
               </View>
-            </View>
-          </View>
+            </TouchableOpacity>
+          )}
           <View style={styles.addressRow}>
             <MapPin size={13} color={colors.mediumGray} />
             <Text style={styles.addressText}>{product.pickupAddress}</Text>
@@ -242,26 +275,34 @@ export default function ProductDetailScreen({ route, navigation }) {
   );
 }
 
-function getPriceHistory(product) {
-  const orig = product.originalPrice;
-  const curr = product.salePrice;
-  const drop = orig - curr;
-  const pickupH = new Date(product.pickupStart).getHours();
-  const startH = Math.max(8, pickupH - 6);
-  const pad = h => (h < 10 ? `0${h}` : String(h));
+const PH_REASON_LABEL = { initial: '판매 시작가', auto: '자동 할인 적용', manual: '가격 조정' };
+
+// 실제 이력(product_price_history) → 표시용 타임라인. 이력이 없으면 시작가→현재가 2점(조작 없이).
+function buildPriceTimeline(product, rows) {
+  if (rows && rows.length > 0) {
+    const pts = rows.map(r => ({
+      time: r.time,
+      label: PH_REASON_LABEL[r.reason] || '가격 변동',
+      price: r.price,
+      isCurrent: false,
+    }));
+    const last = pts.length - 1;
+    pts[last] = { ...pts[last], time: '현재', label: '오늘 최종 할인 중', price: product.salePrice, isCurrent: true };
+    return pts;
+  }
   return [
-    { time: `${pad(startH)}:00`,     label: '판매 시작가',       price: orig, isCurrent: false },
-    { time: `${pad(startH + 2)}:00`, label: '1차 할인 적용',     price: Math.round((orig - drop * 0.28) / 100) * 100, isCurrent: false },
-    { time: `${pad(startH + 4)}:00`, label: '마감 할인 진행',    price: Math.round((orig - drop * 0.60) / 100) * 100, isCurrent: false },
-    { time: '현재',                   label: '오늘 최종 할인 중', price: curr, isCurrent: true  },
+    { time: '시작가', label: '판매 시작가',       price: product.originalPrice, isCurrent: false },
+    { time: '현재',   label: '오늘 최종 할인 중', price: product.salePrice,     isCurrent: true  },
   ];
 }
 
-function PriceFlowCard({ product }) {
+function PriceFlowCard({ product, history }) {
   const [expanded, setExpanded] = useState(false);
-  const history = getPriceHistory(product);
+  const timeline = buildPriceTimeline(product, history);
   const priceDrop = product.originalPrice - product.salePrice;
-  const tPoints = [history[0], history[2], history[3]];
+  const tPoints = timeline.length <= 3
+    ? timeline
+    : [timeline[0], timeline[Math.floor((timeline.length - 1) / 2)], timeline[timeline.length - 1]];
 
   return (
     <View style={styles.pfCard}>
@@ -288,7 +329,7 @@ function PriceFlowCard({ product }) {
       {/* 펼쳐진 상세 내역 */}
       {expanded && (
         <View style={styles.pfDetailWrap}>
-          {history.map((h, i) => (
+          {timeline.map((h, i) => (
             <View key={i} style={[styles.pfRow, h.isCurrent && styles.pfRowCurrent]}>
               <Text style={[styles.pfRowTime, h.isCurrent && styles.pfActive]}>{h.time}</Text>
               <Text style={[styles.pfRowLabel, h.isCurrent && styles.pfActive]}>{h.label}</Text>
@@ -461,6 +502,7 @@ const styles = StyleSheet.create({
     borderRadius: 8, paddingHorizontal: 12, paddingVertical: 4,
   },
   mapLabelText: { fontSize: 12, fontWeight: '700', color: colors.white },
+  mapTapHint: { fontSize: 11, color: '#5A7A5A', fontWeight: '600', marginTop: 8 },
   addressRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   addressText: { flex: 1, fontSize: 13, color: colors.mediumGray },
 

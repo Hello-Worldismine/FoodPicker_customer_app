@@ -10,14 +10,10 @@ const TABS = [
   { key: 'used',      label: '사용 완료' },
 ];
 
-// TODO: GET /api/coupons?status=used 로 교체
-const USED_COUPONS = [
-  { id: 'CPN-000', name: '첫 주문 감사 쿠폰', discountType: '정액', discountValue: 2000, minOrderAmount: 5000, endDate: '2024.05.31', usedAt: '2024.05.20' },
-];
-
 function discountLabel(coupon) {
   if (coupon.discountType === '정액') return `${coupon.discountValue.toLocaleString()}원 할인`;
-  return `${coupon.discountValue}% 할인`;
+  const cap = coupon.maxDiscountAmount ? ` (최대 ${coupon.maxDiscountAmount.toLocaleString()}원)` : '';
+  return `${coupon.discountValue}% 할인${cap}`;
 }
 
 function CouponCard({ coupon, used }) {
@@ -32,6 +28,11 @@ function CouponCard({ coupon, used }) {
             {discountLabel(coupon)}
           </Text>
           <Text style={styles.couponName} numberOfLines={1}>{coupon.name}</Text>
+          {coupon.allowStacking && (
+            <View style={styles.stackBadge}>
+              <Text style={styles.stackBadgeText}>중복 사용 가능</Text>
+            </View>
+          )}
         </View>
         {used && (
           <View style={styles.usedBadge}>
@@ -50,23 +51,31 @@ function CouponCard({ coupon, used }) {
 }
 
 export default function CouponScreen({ navigation }) {
-  const { coupons } = useApp();
+  const { coupons, usedCoupons, redeemCoupon } = useApp();
   const [tab, setTab] = useState('available');
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState('');
   const [codeSuccess, setCodeSuccess] = useState('');
+  const [registering, setRegistering] = useState(false);
 
-  function handleRegister() {
-    if (!code.trim()) { setCodeError('쿠폰 코드를 입력해주세요.'); setCodeSuccess(''); return; }
-    // TODO: POST /api/coupons/register  body: { code }
-    //   성공 → AppContext의 쿠폰 목록 갱신 (GET /api/coupons 재호출)
-    //   실패 → setCodeError(서버 에러 메시지)
-    setCodeError('');
-    setCodeSuccess('유효하지 않은 쿠폰 코드입니다.');
-    setCode('');
+  async function handleRegister() {
+    const c = code.trim();
+    if (!c) { setCodeError('쿠폰 코드를 입력해주세요.'); setCodeSuccess(''); return; }
+    if (registering) return;
+    setRegistering(true);
+    setCodeError(''); setCodeSuccess('');
+    try {
+      await redeemCoupon(c);
+      setCodeSuccess('쿠폰이 등록되었습니다.');
+      setCode('');
+    } catch {
+      setCodeError('유효하지 않은 쿠폰 코드입니다.');
+    } finally {
+      setRegistering(false);
+    }
   }
 
-  const listToShow = tab === 'available' ? coupons : USED_COUPONS;
+  const listToShow = tab === 'available' ? coupons : usedCoupons;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -97,7 +106,7 @@ export default function CouponScreen({ navigation }) {
             </TouchableOpacity>
           </View>
           {!!codeError && <Text style={styles.codeError}>{codeError}</Text>}
-          {!!codeSuccess && <Text style={styles.codeError}>{codeSuccess}</Text>}
+          {!!codeSuccess && <Text style={styles.codeSuccess}>{codeSuccess}</Text>}
         </View>
 
         {/* 탭 */}
@@ -154,6 +163,7 @@ const styles = StyleSheet.create({
   },
   codeBtnText: { fontSize: 14, fontWeight: '700', color: colors.white },
   codeError: { fontSize: 12, color: colors.alertRed, marginTop: 6 },
+  codeSuccess: { fontSize: 12, color: colors.primaryGreen, marginTop: 6 },
   tabs: {
     backgroundColor: colors.white, flexDirection: 'row',
     borderBottomWidth: 2, borderBottomColor: colors.softGray, marginBottom: 8,
@@ -183,6 +193,8 @@ const styles = StyleSheet.create({
   couponInfo: { flex: 1 },
   couponDiscount: { fontSize: 19, fontWeight: '900' },
   couponName: { fontSize: 13, fontWeight: '600', color: colors.charcoalBlack, marginTop: 2 },
+  stackBadge: { alignSelf: 'flex-start', marginTop: 4, backgroundColor: '#EAF2FF', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  stackBadgeText: { fontSize: 10, fontWeight: '700', color: '#3B82F6' },
   usedBadge: { backgroundColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
   usedBadgeText: { fontSize: 11, fontWeight: '700', color: colors.mediumGray },
   couponBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },

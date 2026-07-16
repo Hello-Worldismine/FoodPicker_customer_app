@@ -2,7 +2,9 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CheckCircle, QrCode, Navigation, ClipboardList } from 'lucide-react-native';
+import QRCode from 'react-native-qrcode-svg';
 import { colors } from '../theme';
+import { openDirections } from '../lib/maps';
 
 export default function OrderCompleteScreen({ navigation, route }) {
   const { order } = route.params;
@@ -25,9 +27,11 @@ export default function OrderCompleteScreen({ navigation, route }) {
             <Text style={styles.pickupNumLabel}>픽업번호</Text>
             <Text style={styles.pickupNum}>{order.id}</Text>
             <View style={styles.qrBox}>
-              <QrCode size={80} color={colors.charcoalBlack} />
+              {order?.id
+                ? <QRCode value={order.id} size={140} backgroundColor="transparent" color={colors.charcoalBlack} />
+                : <QrCode size={80} color={colors.charcoalBlack} />}
             </View>
-            <Text style={styles.qrGuide}>매장 직원에게 픽업번호를 보여주세요.</Text>
+            <Text style={styles.qrGuide}>매장 직원에게 QR 또는 픽업번호를 보여주세요.</Text>
           </View>
 
           {/* 예약 정보 */}
@@ -54,7 +58,10 @@ export default function OrderCompleteScreen({ navigation, route }) {
 
           {/* 버튼 */}
           <View style={styles.btnRow}>
-            <TouchableOpacity style={styles.navBtn}>
+            <TouchableOpacity
+              style={styles.navBtn}
+              onPress={() => openDirections({ address: order.storeAddress, label: order.store })}
+            >
               <Navigation size={16} color={colors.primaryGreen} />
               <Text style={styles.navBtnText}>길찾기</Text>
             </TouchableOpacity>

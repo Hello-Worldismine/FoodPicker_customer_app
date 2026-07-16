@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   FlatList, StyleSheet, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ArrowLeft, Search, X, SlidersHorizontal, ChevronDown } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
-import { stores } from '../data/mockData';
 import ListProductCard from '../components/ListProductCard';
 
 const FILTERS = {
@@ -17,14 +17,18 @@ const FILTERS = {
   category: ['빵', '도시락', '샐러드', '반찬', '디저트', '음료'],
 };
 const FILTER_LABELS = { distance: '거리', price: '가격', discount: '할인율', category: '카테고리' };
+// 필터 옵션 → 수치 임계값
+const DIST_MAX  = { '500m': 500, '1km': 1000, '3km': 3000, '5km': 5000 };
+const PRICE_MAX = { '3천원 이하': 3000, '5천원 이하': 5000, '1만원 이하': 10000 };
+const DISC_MIN  = { '30% 이상': 30, '50% 이상': 50, '70% 이상': 70 };
 
 const SORT_OPTIONS = ['가까운 순', '마감 임박 순', '할인율 높은 순', '낮은 가격 순'];
 
-// TODO: GET /api/search/suggestions?q={query} 로 실시간 자동완성 교체
+const RECENT_KEY = 'search_recent';
 const SUGGESTIONS = ['크루아상', '샐러드', '도시락', '아메리카노', '샌드위치', '반찬세트', '베이글', '마감임박'];
 
 export default function SearchScreen({ navigation }) {
-  const { productList, handleLike } = useApp();
+  const { productList, stores, handleLike } = useApp();
   const [query, setQuery] = useState('');
   const [recent, setRecent] = useState([]);
   const [activeFilters, setActiveFilters] = useState({});
@@ -32,6 +36,17 @@ export default function SearchScreen({ navigation }) {
   const [sortBy, setSortBy] = useState('가까운 순');
   const [showSort, setShowSort] = useState(false);
   const [searched, setSearched] = useState(false);
+
+  // 최근 검색어는 AsyncStorage 에 영속.
+  useEffect(() => {
+    AsyncStorage.getItem(RECENT_KEY)
+      .then(v => { if (v) { try { setRecent(JSON.parse(v)); } catch {} } })
+      .catch(() => {});
+  }, []);
+  function persistRecent(next) {
+    setRecent(next);
+    AsyncStorage.setItem(RECENT_KEY, JSON.stringify(next)).catch(() => {});
+  }
 
   function toggleFilter(group, val) {
     setActiveFilters(prev => {
@@ -47,9 +62,7 @@ export default function SearchScreen({ navigation }) {
     if (!trimmed) return;
     setQuery(trimmed);
     setSearched(true);
-    // TODO: 최근 검색어를 로컬 상태 대신 AsyncStorage 또는 GET /api/users/me/search-history 로 관리
-    setRecent(prev => [trimmed, ...prev.filter(s => s !== trimmed)].slice(0, 10));
-    // TODO: GET /api/search?q={trimmed}&sort={sortBy}&filters={activeFilters} 호출로 교체
+    persistRecent([trimmed, ...recent.filter(s => s !== trimmed)].slice(0, 10));
   }
 
   const selling = productList.filter(
@@ -61,10 +74,20 @@ export default function SearchScreen({ navigation }) {
         !p.store.toLowerCase().includes(query.toLowerCase())) return false;
     const cats = activeFilters.category || [];
     if (cats.length > 0 && !cats.includes(p.category)) return false;
+    // 거리: 선택한 반경 중 가장 큰 값 이내
+    const dsel = activeFilters.distance || [];
+    if (dsel.length > 0 && p.distance > Math.max(...dsel.map(d => DIST_MAX[d] ?? Infinity))) return false;
+    // 가격: 선택한 상한 중 가장 큰 값 이하
+    const psel = activeFilters.price || [];
+    if (psel.length > 0 && p.salePrice > Math.max(...psel.map(v => PRICE_MAX[v] ?? Infinity))) return false;
+    // 할인율: 선택한 하한 중 가장 작은 값 이상
+    const rsel = activeFilters.discount || [];
+    if (rsel.length > 0 && p.discountRate < Math.min(...rsel.map(v => DISC_MIN[v] ?? 0))) return false;
     return true;
   });
 
   if (sortBy === '가까운 순') results = [...results].sort((a, b) => a.distance - b.distance);
+  else if (sortBy === '마감 임박 순') results = [...results].sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
   else if (sortBy === '할인율 높은 순') results = [...results].sort((a, b) => b.discountRate - a.discountRate);
   else if (sortBy === '낮은 가격 순') results = [...results].sort((a, b) => a.salePrice - b.salePrice);
 
@@ -163,7 +186,7 @@ export default function SearchScreen({ navigation }) {
             <View style={styles.preSection}>
               <View style={styles.preSectionHeader}>
                 <Text style={styles.preSectionTitle}>최근 검색어</Text>
-                <TouchableOpacity onPress={() => setRecent([])}>
+                <TouchableOpacity onPress={() => persistRecent([])}>
                   <Text style={styles.preClearAll}>전체 삭제</Text>
                 </TouchableOpacity>
               </View>
@@ -173,7 +196,7 @@ export default function SearchScreen({ navigation }) {
                     <TouchableOpacity onPress={() => applyKeyword(kw)}>
                       <Text style={styles.recentChipText}>{kw}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setRecent(prev => prev.filter(r => r !== kw))}>
+                    <TouchableOpacity onPress={() => persistRecent(recent.filter(r => r !== kw))}>
                       <X size={13} color={colors.mediumGray} />
                     </TouchableOpacity>
                   </View>
