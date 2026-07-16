@@ -287,15 +287,18 @@ export default function StoreScreen({ route, navigation }) {
 
               {/* 네이버 지도 (좌표 있으면 실지도, 없으면 탭하여 외부 지도) */}
               {store.lat != null && store.lng != null ? (
-                <NaverMap
-                  lat={store.lat}
-                  lng={store.lng}
-                  markers={[{ lat: store.lat, lng: store.lng, title: store.name }]}
-                  style={styles.mapPlaceholder}
-                />
+                <View style={styles.mapPlaceholder}>
+                  <NaverMap
+                    lat={store.lat}
+                    lng={store.lng}
+                    markers={[{ lat: store.lat, lng: store.lng, title: store.name }]}
+                    interactive={false}
+                    style={{ flex: 1 }}
+                  />
+                </View>
               ) : (
                 <TouchableOpacity
-                  style={styles.mapPlaceholder}
+                  style={[styles.mapPlaceholder, { alignItems: 'center', justifyContent: 'center' }]}
                   activeOpacity={0.85}
                   onPress={() => openInMaps({ address: store.address, label: store.name })}
                 >
@@ -458,7 +461,6 @@ const styles = StyleSheet.create({
   mapPlaceholder: {
     height: 160, borderRadius: 14, backgroundColor: '#E8F4E8',
     overflow: 'hidden', marginBottom: 12,
-    alignItems: 'center', justifyContent: 'center',
   },
   mapLabel: {
     marginTop: 6, backgroundColor: colors.primaryGreen,
