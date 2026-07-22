@@ -271,7 +271,7 @@ export default function HomeScreen({ navigation }) {
               <View style={{ width: SCREEN_W }}>
                 {item.imageUrl ? (
                   <TouchableOpacity activeOpacity={0.85} onPress={() => goCategory(bannerCategory(item.link))}>
-                    <Image source={{ uri: item.imageUrl }} style={styles.banner} resizeMode="cover" />
+                    <Image source={{ uri: item.imageUrl }} style={styles.bannerImg} resizeMode="cover" />
                   </TouchableOpacity>
                 ) : (
                   <LinearGradient colors={item.bg} style={styles.banner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
@@ -432,10 +432,12 @@ const styles = StyleSheet.create({
 
   /* 배너 */
   bannerWrap: { paddingTop: 0 },
+  bannerImg: { width: SCREEN_W, height: 150 },
   banner: {
+    width: SCREEN_W, height: 150,
     paddingHorizontal: 24, paddingVertical: 20,
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', height: 150, overflow: 'hidden',
+    justifyContent: 'space-between', overflow: 'hidden',
   },
   bannerCircle1: {
     position: 'absolute', right: -20, top: -20,
