@@ -290,11 +290,11 @@ export default function HomeScreen({ navigation }) {
               </View>
             )}
           />
-          <View style={styles.indicators}>
-            {banners.map((_, i) => (
-              <View key={i} style={[styles.dot, i === bannerIndex && styles.dotActive]} />
-            ))}
-          </View>
+          {banners.length > 1 && (
+            <View style={styles.pageCounter} pointerEvents="none">
+              <Text style={styles.pageCounterText}>{bannerIndex + 1}/{banners.length}</Text>
+            </View>
+          )}
         </View>
 
         {/* 카테고리 그리드 */}
@@ -431,7 +431,7 @@ const styles = StyleSheet.create({
   searchPlaceholder: { fontSize: 14, color: colors.mediumGray },
 
   /* 배너 */
-  bannerWrap: { paddingTop: 0 },
+  bannerWrap: { paddingTop: 0, position: 'relative' },
   bannerImg: { width: SCREEN_W, height: 150 },
   banner: {
     width: SCREEN_W, height: 150,
@@ -457,9 +457,12 @@ const styles = StyleSheet.create({
   },
   bannerBtnText: { fontSize: 13, fontWeight: '700', color: colors.white },
   bannerEmoji: { fontSize: 52, marginLeft: 8, flexShrink: 0, lineHeight: 60 },
-  indicators: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 10 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#D0D3D7' },
-  dotActive: { width: 20, backgroundColor: colors.primaryGreen, borderRadius: 3 },
+  pageCounter: {
+    position: 'absolute', bottom: 10, right: 14,
+    backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 10,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  pageCounterText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 
   /* 카테고리 그리드 */
   catSection: {
