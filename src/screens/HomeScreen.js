@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
   bannerBtnText: { fontSize: 13, fontWeight: '700', color: colors.white },
   bannerEmoji: { fontSize: 52, marginLeft: 8, flexShrink: 0, lineHeight: 60 },
   pageCounter: {
-    position: 'absolute', bottom: 10, right: 14,
+    position: 'absolute', bottom: 30, right: 14,
     backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 10,
     paddingHorizontal: 8, paddingVertical: 3,
   },
