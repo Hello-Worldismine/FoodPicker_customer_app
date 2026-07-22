@@ -127,9 +127,9 @@ export default function AddressScreen({ navigation }) {
         </View>
       </View>
 
-      {/* 검색 결과 오버레이 */}
-      {showResults && (
-        <View style={styles.resultsOverlay}>
+      {/* 검색 결과 or 주소 목록 — 검색바 바로 아래 일반 흐름으로 렌더 */}
+      {showResults ? (
+        <ScrollView style={styles.resultsScroll} keyboardShouldPersistTaps="handled">
           <TouchableOpacity
             style={styles.resultCurrentBtn}
             onPress={handleUseCurrentLocation}
@@ -156,62 +156,62 @@ export default function AddressScreen({ navigation }) {
               <Text style={styles.noResultText}>검색 결과가 없습니다</Text>
             </View>
           )}
-        </View>
-      )}
+        </ScrollView>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+          {/* 현재 위치로 찾기 */}
+          <TouchableOpacity style={styles.gpsBtn} onPress={handleUseCurrentLocation} disabled={locating}>
+            <Navigation2 size={18} color={locating ? colors.mediumGray : colors.primaryGreen} />
+            <Text style={styles.gpsBtnText}>{locating ? '위치 찾는 중…' : '현재 위치로 찾기'}</Text>
+          </TouchableOpacity>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        {/* 현재 위치로 찾기 */}
-        <TouchableOpacity style={styles.gpsBtn} onPress={handleUseCurrentLocation} disabled={locating}>
-          <Navigation2 size={18} color={locating ? colors.mediumGray : colors.primaryGreen} />
-          <Text style={styles.gpsBtnText}>{locating ? '위치 찾는 중…' : '현재 위치로 찾기'}</Text>
-        </TouchableOpacity>
-
-        {/* 저장된 주소 목록 */}
-        <View style={styles.addrList}>
-          {addresses.map((addr, idx) => {
-            const isSelected = currentAddress?.id === addr.id;
-            return (
-              <View
-                key={addr.id}
-                style={[styles.addrRow, idx < addresses.length - 1 && styles.addrRowBorder]}
-              >
-                <TouchableOpacity
-                  style={styles.addrMain}
-                  onPress={() => { handleSelectAddress(addr.id); navigation.goBack(); }}
-                  activeOpacity={0.7}
+          {/* 저장된 주소 목록 */}
+          <View style={styles.addrList}>
+            {addresses.map((addr, idx) => {
+              const isSelected = currentAddress?.id === addr.id;
+              return (
+                <View
+                  key={addr.id}
+                  style={[styles.addrRow, idx < addresses.length - 1 && styles.addrRowBorder]}
                 >
-                  <View style={[styles.addrIconWrap, isSelected && styles.addrIconWrapActive]}>
-                    <IconComp icon={addr.icon} size={17} color={isSelected ? colors.primaryGreen : colors.mediumGray} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <View style={styles.addrLabelRow}>
-                      <Text style={[styles.addrLabel, isSelected && styles.addrLabelActive]}>
-                        {addr.label}
-                      </Text>
-                      {isSelected && (
-                        <View style={styles.currentBadge}>
-                          <Text style={styles.currentBadgeText}>현재 설정된 주소</Text>
-                        </View>
-                      )}
+                  <TouchableOpacity
+                    style={styles.addrMain}
+                    onPress={() => { handleSelectAddress(addr.id); navigation.goBack(); }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.addrIconWrap, isSelected && styles.addrIconWrapActive]}>
+                      <IconComp icon={addr.icon} size={17} color={isSelected ? colors.primaryGreen : colors.mediumGray} />
                     </View>
-                    <Text style={styles.addrText} numberOfLines={2}>{addr.address}</Text>
-                  </View>
-                  {isSelected && (
-                    <Check size={18} color={colors.primaryGreen} style={{ flexShrink: 0 }} />
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.deleteBtn}
-                  onPress={() => confirmDelete(addr.id)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Trash2 size={15} color="#CCC" />
-                </TouchableOpacity>
-              </View>
-            );
-          })}
-        </View>
-      </ScrollView>
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.addrLabelRow}>
+                        <Text style={[styles.addrLabel, isSelected && styles.addrLabelActive]}>
+                          {addr.label}
+                        </Text>
+                        {isSelected && (
+                          <View style={styles.currentBadge}>
+                            <Text style={styles.currentBadgeText}>현재 설정된 주소</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.addrText} numberOfLines={2}>{addr.address}</Text>
+                    </View>
+                    {isSelected && (
+                      <Check size={18} color={colors.primaryGreen} style={{ flexShrink: 0 }} />
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.deleteBtn}
+                    onPress={() => confirmDelete(addr.id)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Trash2 size={15} color="#CCC" />
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
+      )}
 
       {/* 주소 추가 확인 모달 */}
       <Modal visible={!!addModal} transparent animationType="slide" onRequestClose={() => setAddModal(null)}>
@@ -276,10 +276,7 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14, color: colors.charcoalBlack },
 
-  resultsOverlay: {
-    position: 'absolute', top: 120, left: 0, right: 0, bottom: 0,
-    backgroundColor: colors.white, zIndex: 100,
-  },
+  resultsScroll: { flex: 1, backgroundColor: colors.white },
   resultCurrentBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 20, paddingVertical: 16,
