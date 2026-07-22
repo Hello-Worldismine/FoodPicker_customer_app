@@ -397,6 +397,55 @@ export async function markAllNotifRead() {
   if (error) throw error;
 }
 
+// ───────── FAQ (관리자 웹에서 관리 — faqs 테이블, 20260722 마이그레이션) ─────────
+// is_active=true 만 RLS 로 공개(anon 포함). 카테고리 영문 키 → 화면 한글 라벨 매핑.
+const FAQ_CATEGORY_LABEL = {
+  order_payment: '주문 · 결제', pickup: '픽업', product_store: '상품 · 가게', account: '계정',
+};
+export async function fetchFaqs() {
+  const { data, error } = await supabase
+    .from('faqs')
+    .select('id, category, question, answer, display_order')
+    .eq('is_active', true) // RLS 만으로는 관리자 계정 로그인 시 비활성 FAQ 까지 내려옴 — 명시 필터
+    .order('display_order', { ascending: true });
+  if (error) throw error;
+  // FAQScreen 이 기대하는 형태로 그룹핑: [{ category(한글), items: [{ q, a }] }]
+  const order = ['order_payment', 'pickup', 'product_store', 'account'];
+  return order
+    .map(key => ({
+      category: FAQ_CATEGORY_LABEL[key],
+      items: (data || []).filter(r => r.category === key).map(r => ({ q: r.question, a: r.answer })),
+    }))
+    .filter(g => g.items.length > 0);
+}
+
+// ───────── 상품 미디어 (상태 무관 — public_product_media 뷰, 20260722 마이그레이션) ─────────
+// public_products 는 selling 만 노출 → 품절/종료 상품의 리뷰쓰기 화면 사진 폴백용.
+export async function fetchProductMedia(productId) {
+  const { data, error } = await supabase
+    .from('public_product_media')
+    .select('id, emoji, thumbnail, images')
+    .eq('id', productId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return { emoji: data.emoji || null, image: data.thumbnail || (data.images && data.images[0]) || null };
+}
+
+// ───────── 1:1 문의 (관리자 웹 신고/문의관리 reports 테이블과 연동) ─────────
+// create_report RPC(20260716 마이그레이션)가 접수번호 발번·RLS 검증을 서버에서 처리.
+export async function createInquiry(type, title, content, orderCode = null) {
+  // p_inquirer: 판매자 계정으로 사용자앱에 로그인해도 구매자 문의로 분류(관리자 웹 사용자 탭 유형 필터와 대응).
+  // 20260722020000 마이그레이션 필요 — 미적용 DB(시그니처 불일치, PGRST202)면 구버전 시그니처로 재시도.
+  const base = { p_type: type, p_title: title, p_content: content, p_order_code: orderCode };
+  let { data, error } = await supabase.rpc('create_report', { ...base, p_inquirer: 'buyer' });
+  if (error && error.code === 'PGRST202') {
+    ({ data, error } = await supabase.rpc('create_report', base));
+  }
+  if (error) throw error;
+  return { id: data.id, receiptCode: data.receipt_code };
+}
+
 // ───────── 배너 (관리자 웹에서 관리 — banners 테이블, 20260716 마이그레이션) ─────────
 // is_active=true 만 RLS 로 공개. 게시 기간(start/end_date)은 클라이언트에서 판정.
 export async function fetchActiveBanners() {

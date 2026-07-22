@@ -1,15 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { colors } from '../theme';
+import { fetchFaqs } from '../lib/api';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 
+// 폴백 전용: 서버 조회 실패(오프라인 등) 시에만 표시하는 기본 FAQ.
+// 실제 데이터는 관리자 웹에서 관리하는 faqs 테이블에서 fetchFaqs()로 불러온다.
 const FAQS = [
   {
     category: '주문 · 결제',
@@ -102,6 +106,18 @@ function FAQItem({ item }) {
 }
 
 export default function FAQScreen({ navigation }) {
+  const [faqs, setFaqs] = useState(null); // null = 로딩 중
+  const [loading, setLoading] = useState(true);
+
+  // 관리자 웹에서 등록·수정한 FAQ 를 서버에서 조회. 실패 시 하드코딩 FAQS 폴백.
+  useEffect(() => {
+    let alive = true;
+    fetchFaqs()
+      .then(data => { if (alive) { setFaqs(data); setLoading(false); } })
+      .catch(() => { if (alive) { setFaqs(FAQS); setLoading(false); } });
+    return () => { alive = false; };
+  }, []);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
@@ -112,21 +128,33 @@ export default function FAQScreen({ navigation }) {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {FAQS.map(section => (
-          <View key={section.category} style={styles.section}>
-            <Text style={styles.categoryLabel}>{section.category}</Text>
-            <View style={styles.card}>
-              {section.items.map((item, idx) => (
-                <View key={idx}>
-                  <FAQItem item={item} />
-                  {idx < section.items.length - 1 && <View style={styles.divider} />}
-                </View>
-              ))}
+      {loading ? (
+        <View style={styles.loading}>
+          <ActivityIndicator size="large" color={colors.primaryGreen} />
+        </View>
+      ) : faqs.length === 0 ? (
+        // 조회는 성공했지만 공개된 FAQ 가 한 건도 없는 경우
+        <View style={styles.empty}>
+          <Text style={styles.emptyEmoji}>💬</Text>
+          <Text style={styles.emptyText}>등록된 FAQ가 없습니다</Text>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {faqs.map(section => (
+            <View key={section.category} style={styles.section}>
+              <Text style={styles.categoryLabel}>{section.category}</Text>
+              <View style={styles.card}>
+                {section.items.map((item, idx) => (
+                  <View key={idx}>
+                    <FAQItem item={item} />
+                    {idx < section.items.length - 1 && <View style={styles.divider} />}
+                  </View>
+                ))}
+              </View>
             </View>
-          </View>
-        ))}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -143,6 +171,11 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '800', color: colors.charcoalBlack },
 
   content: { padding: 16, paddingBottom: 60 },
+
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyEmoji: { fontSize: 52, marginBottom: 14 },
+  emptyText: { fontSize: 15, color: colors.mediumGray },
 
   section: { marginBottom: 20 },
   categoryLabel: {

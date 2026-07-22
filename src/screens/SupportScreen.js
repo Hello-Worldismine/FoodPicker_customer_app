@@ -13,7 +13,8 @@ const CHANNELS = [
     label: '1:1 문의',
     desc: '답변까지 1~2일 소요',
     badge: null,
-    onPress: () => Linking.openURL('mailto:foodpicker77@gmail.com?subject=1:1 문의'),
+    // 관리자 웹 신고/문의관리(reports)와 연동된 앱 내 문의 작성 화면으로 이동
+    screen: 'Inquiry',
   },
   {
     Icon: Mail,
@@ -65,7 +66,7 @@ export default function SupportScreen({ navigation }) {
               <TouchableOpacity
                 key={ch.label}
                 style={[styles.row, idx < CHANNELS.length - 1 && styles.rowBorder]}
-                onPress={ch.onPress}
+                onPress={ch.screen ? () => navigation.navigate(ch.screen) : ch.onPress}
                 activeOpacity={0.7}
               >
                 <View style={styles.iconWrap}>
