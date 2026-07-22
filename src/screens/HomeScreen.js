@@ -432,9 +432,9 @@ const styles = StyleSheet.create({
 
   /* 배너 */
   bannerWrap: { paddingTop: 0, position: 'relative' },
-  bannerImg: { width: SCREEN_W, height: 150 },
+  bannerImg: { width: SCREEN_W, height: 200 },
   banner: {
-    width: SCREEN_W, height: 150,
+    width: SCREEN_W, height: 200,
     paddingHorizontal: 24, paddingVertical: 20,
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', overflow: 'hidden',
