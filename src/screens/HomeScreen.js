@@ -466,8 +466,10 @@ const styles = StyleSheet.create({
 
   /* 카테고리 그리드 */
   catSection: {
-    backgroundColor: colors.white, marginTop: 16,
+    backgroundColor: colors.white, marginTop: -20,
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
     paddingHorizontal: 16, paddingTop: 22, paddingBottom: 8,
+    zIndex: 1,
   },
   catGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   catItem: {
