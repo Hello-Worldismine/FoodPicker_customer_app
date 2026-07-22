@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking, Image, Share, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking, Image, Share, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ArrowLeft, Share2, Heart, Star, Navigation, Phone, MessageSquare,
-  MapPin, Clock, Ticket,
+  MapPin, Clock, Ticket, Download, Check,
 } from 'lucide-react-native';
 import { colors } from '../theme';
 // 매장/상품은 Supabase(useApp)에서 로드.
@@ -155,36 +155,49 @@ export default function StoreScreen({ route, navigation }) {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* 매장 전용 쿠폰 (점주 발행) */}
+        {/* 매장 전용 쿠폰 다운로드 */}
         {storeCoupons.length > 0 && (
           <View style={styles.couponSection}>
             <View style={styles.couponSectionHeader}>
               <Ticket size={15} color={colors.primaryGreen} />
-              <Text style={styles.couponSectionTitle}>매장 쿠폰</Text>
+              <Text style={styles.couponSectionTitle}>쿠폰 다운로드</Text>
+              <View style={styles.couponCountBadge}>
+                <Text style={styles.couponCountBadgeText}>{storeCoupons.length}장</Text>
+              </View>
             </View>
-            {storeCoupons.map(c => {
+            {storeCoupons.map((c, idx) => {
               const owned = ownedCouponIds.has(c.couponId);
+              const isLast = idx === storeCoupons.length - 1;
+              const discountText = c.discountType === '정액'
+                ? `${c.discountValue.toLocaleString()}원 할인`
+                : `${c.discountValue}% 할인${c.maxDiscountAmount ? ` 최대 ${c.maxDiscountAmount.toLocaleString()}원` : ''}`;
               return (
-                <View key={c.couponId} style={styles.storeCouponCard}>
+                <View key={c.couponId} style={[styles.couponRow, !isLast && styles.couponRowDivider]}>
+                  <View style={styles.couponRowIcon}>
+                    <Ticket size={18} color={owned ? colors.mediumGray : colors.primaryGreen} />
+                  </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.storeCouponDiscount}>
-                      {c.discountType === '정액'
-                        ? `${c.discountValue.toLocaleString()}원 할인`
-                        : `${c.discountValue}% 할인${c.maxDiscountAmount ? ` (최대 ${c.maxDiscountAmount.toLocaleString()}원)` : ''}`}
+                    <Text style={[styles.couponRowDiscount, owned && { color: colors.mediumGray }]}>
+                      {discountText}
                     </Text>
-                    <Text style={styles.storeCouponName} numberOfLines={1}>{c.name}</Text>
-                    <Text style={styles.storeCouponMeta}>
-                      최소 {c.minOrderAmount.toLocaleString()}원{c.endDate ? ` · ~${c.endDate}` : ''}{c.allowStacking ? ' · 중복가능' : ''}
+                    <Text style={styles.couponRowName} numberOfLines={1}>{c.name}</Text>
+                    <Text style={styles.couponRowMeta}>
+                      {c.minOrderAmount.toLocaleString()}원 이상
+                      {c.endDate ? ` · ~${c.endDate}` : ''}
+                      {c.allowStacking ? ' · 중복가능' : ''}
                     </Text>
                   </View>
                   <TouchableOpacity
-                    style={[styles.claimBtn, owned && styles.claimBtnDone]}
+                    style={[styles.couponDownloadBtn, owned && styles.couponDownloadBtnDone]}
                     disabled={owned || claiming === c.couponId}
                     onPress={() => handleClaim(c)}
                   >
-                    <Text style={[styles.claimText, owned && styles.claimTextDone]}>
-                      {owned ? '받음' : claiming === c.couponId ? '…' : '받기'}
-                    </Text>
+                    {claiming === c.couponId
+                      ? <ActivityIndicator size="small" color={colors.white} />
+                      : owned
+                        ? <Check size={17} color={colors.mediumGray} strokeWidth={2.5} />
+                        : <Download size={17} color={colors.white} strokeWidth={2.5} />
+                    }
                   </TouchableOpacity>
                 </View>
               );
@@ -400,20 +413,26 @@ const styles = StyleSheet.create({
   actionLabel: { fontSize: 12, fontWeight: '600' },
 
   /* 정보 카드 */
-  couponSection: { backgroundColor: colors.white, marginBottom: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 },
-  couponSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
-  couponSectionTitle: { fontSize: 14, fontWeight: '800', color: colors.charcoalBlack },
-  storeCouponCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: colors.freshMint, borderRadius: 12, padding: 12, marginBottom: 8,
+  couponSection: { backgroundColor: colors.white, marginBottom: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 },
+  couponSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  couponSectionTitle: { flex: 1, fontSize: 14, fontWeight: '800', color: colors.charcoalBlack },
+  couponCountBadge: { backgroundColor: colors.primaryGreen, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+  couponCountBadgeText: { fontSize: 11, fontWeight: '700', color: colors.white },
+  couponRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  couponRowDivider: { borderBottomWidth: 1, borderBottomColor: '#F2F2F2' },
+  couponRowIcon: {
+    width: 40, height: 40, borderRadius: 12, backgroundColor: colors.freshMint,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  storeCouponDiscount: { fontSize: 15, fontWeight: '900', color: colors.primaryGreen },
-  storeCouponName: { fontSize: 13, fontWeight: '600', color: colors.charcoalBlack, marginTop: 2 },
-  storeCouponMeta: { fontSize: 11, color: colors.mediumGray, marginTop: 3 },
-  claimBtn: { backgroundColor: colors.primaryGreen, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8, flexShrink: 0 },
-  claimBtnDone: { backgroundColor: '#E0E0E0' },
-  claimText: { fontSize: 13, fontWeight: '800', color: colors.white },
-  claimTextDone: { color: colors.mediumGray },
+  couponRowDiscount: { fontSize: 15, fontWeight: '900', color: colors.primaryGreen, marginBottom: 2 },
+  couponRowName: { fontSize: 12, fontWeight: '600', color: colors.charcoalBlack, marginBottom: 2 },
+  couponRowMeta: { fontSize: 11, color: colors.mediumGray },
+  couponDownloadBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: colors.primaryGreen,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  couponDownloadBtnDone: { backgroundColor: '#EBEBEB' },
   infoCard: { backgroundColor: colors.white, marginBottom: 8, paddingHorizontal: 16, paddingVertical: 4 },
   infoRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 9 },
   infoRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.softGray },
