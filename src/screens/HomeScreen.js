@@ -268,7 +268,7 @@ export default function HomeScreen({ navigation }) {
             scrollEventThrottle={16}
             onMomentumScrollEnd={e => setBannerIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W))}
             renderItem={({ item }) => (
-              <View style={{ width: SCREEN_W, paddingHorizontal: 16 }}>
+              <View style={{ width: SCREEN_W }}>
                 {item.imageUrl ? (
                   <TouchableOpacity activeOpacity={0.85} onPress={() => goCategory(bannerCategory(item.link))}>
                     <Image source={{ uri: item.imageUrl }} style={styles.banner} resizeMode="cover" />
@@ -431,11 +431,11 @@ const styles = StyleSheet.create({
   searchPlaceholder: { fontSize: 14, color: colors.mediumGray },
 
   /* 배너 */
-  bannerWrap: { paddingTop: 20 },
+  bannerWrap: { paddingTop: 0 },
   banner: {
-    borderRadius: 20, padding: 24,
+    paddingHorizontal: 24, paddingVertical: 20,
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', height: 160, overflow: 'hidden',
+    justifyContent: 'space-between', height: 150, overflow: 'hidden',
   },
   bannerCircle1: {
     position: 'absolute', right: -20, top: -20,
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
     width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.1)',
   },
   bannerContent: { flex: 1 },
-  bannerTitle: { fontSize: 18, fontWeight: '800', color: colors.white, lineHeight: 26, marginBottom: 8 },
+  bannerTitle: { fontSize: 20, fontWeight: '900', color: colors.white, lineHeight: 28, marginBottom: 6 },
   bannerDesc: { fontSize: 13, color: 'rgba(255,255,255,0.88)', marginBottom: 16 },
   bannerBtn: {
     backgroundColor: 'rgba(255,255,255,0.22)',

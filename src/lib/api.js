@@ -324,6 +324,16 @@ export async function fetchMyCoupons() {
   const rows = (data || []).map(mapUserCoupon);
   return { available: rows.filter(c => !c.isUsed), used: rows.filter(c => c.isUsed) };
 }
+// 코드로 쿠폰 정보 미리보기 (등록하지 않음)
+export async function previewCoupon(code) {
+  const { data, error } = await supabase
+    .from('coupons')
+    .select('*')
+    .ilike('code', code.trim())
+    .single();
+  if (error) throw new Error('유효하지 않은 쿠폰 코드입니다.');
+  return mapCoupon(data);
+}
 // 코드 등록 → 내 쿠폰함에 담기(서버 검증). 등록된 쿠폰 반환.
 export async function redeemCoupon(code) {
   const { data, error } = await supabase.rpc('redeem_coupon', { p_code: code });

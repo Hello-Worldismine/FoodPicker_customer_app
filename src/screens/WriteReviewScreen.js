@@ -146,7 +146,7 @@ export default function WriteReviewScreen({ navigation, route }) {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.orderName} numberOfLines={1}>{order?.productName}</Text>
-              <Text style={styles.orderMeta}>{order?.store} · {order?.pickupTime}</Text>
+              <Text style={styles.orderMeta}>{order?.store}</Text>
             </View>
           </View>
         </View>
