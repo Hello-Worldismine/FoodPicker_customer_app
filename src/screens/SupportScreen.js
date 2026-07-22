@@ -9,11 +9,11 @@ import { colors } from '../theme';
 // 실시간 채팅 상담은 보류(챗 백엔드 미연동) → 노출하지 않음.
 const CHANNELS = [
   {
-    Icon: Phone,
-    label: '전화 상담',
-    desc: '1800-8018',
+    Icon: MessageSquare,
+    label: '1:1 문의',
+    desc: '답변까지 1~2일 소요',
     badge: null,
-    onPress: () => Linking.openURL('tel:18008018'),
+    onPress: () => Linking.openURL('mailto:foodpicker77@gmail.com?subject=1:1 문의'),
   },
   {
     Icon: Mail,
@@ -23,11 +23,11 @@ const CHANNELS = [
     onPress: () => Linking.openURL('mailto:foodpicker77@gmail.com'),
   },
   {
-    Icon: MessageSquare,
-    label: '1:1 문의',
-    desc: '답변까지 1~2일 소요',
+    Icon: Phone,
+    label: '전화 상담',
+    desc: '1800-8018',
     badge: null,
-    onPress: () => Linking.openURL('mailto:foodpicker77@gmail.com?subject=1:1 문의'),
+    onPress: () => Linking.openURL('tel:18008018'),
   },
 ];
 
