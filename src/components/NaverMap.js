@@ -48,7 +48,7 @@ function buildHtml({ lat, lng, zoom, markers, interactive }) {
             map: map,
             title: m.title,
             icon: {
-              content: '<div onclick="markerJustClicked=true; post(\'marker:' + i + '\'); setTimeout(function(){markerJustClicked=false;},300);" style="background:' + color + ';color:#fff;padding:4px 9px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.25);cursor:pointer">' + label + '</div>',
+              content: '<div onclick="event.stopPropagation(); markerJustClicked=true; post(&apos;marker:' + i + '&apos;); setTimeout(function(){markerJustClicked=false;},300);" style="background:' + color + ';color:#fff;padding:4px 9px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.25);cursor:pointer">' + label + '</div>',
               anchor: new naver.maps.Point(0, 20)
             }
           });
