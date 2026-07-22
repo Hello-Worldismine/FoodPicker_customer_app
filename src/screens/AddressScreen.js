@@ -6,20 +6,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ArrowLeft, Search, Navigation2, Home, Building2,
-  MapPin, Check, Trash2, X, Plus, Pencil,
+  MapPin, Check, Trash2, Plus, Pencil,
 } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 import { getCurrentCoords, reverseGeocode } from '../lib/location';
-
-// TODO: GET /api/addresses/search?q={query} 로 교체 (카카오 주소 API 또는 도로명주소 API 연동)
-const SEARCH_RESULTS = [
-  { address: '서울 강남구 테헤란로 152', detail: '강남파이낸스센터' },
-  { address: '서울 강남구 테헤란로 427', detail: '위워크타워' },
-  { address: '서울 강남구 역삼로 123', detail: '역삼빌딩' },
-  { address: '서울 마포구 와우산로 94', detail: '신촌아이파크' },
-  { address: '경기 성남시 분당구 정자일로 95', detail: '파크뷰아파트' },
-];
+import DaumPostcodeModal from '../components/DaumPostcodeModal';
 
 function IconComp({ icon, size = 18, color }) {
   if (icon === 'home')     return <Home     size={size} color={color} />;
@@ -30,8 +22,7 @@ function IconComp({ icon, size = 18, color }) {
 export default function AddressScreen({ navigation }) {
   const { addresses, currentAddress, handleSelectAddress, handleAddAddress, handleDeleteAddress } = useApp();
 
-  const [query, setQuery] = useState('');
-  const [showResults, setShowResults] = useState(false);
+  const [postcodeVisible, setPostcodeVisible] = useState(false);
   const [addModal, setAddModal] = useState(null); // { address, detail }
   const [labelInput, setLabelInput] = useState('');
   const [locating, setLocating] = useState(false);
@@ -44,8 +35,6 @@ export default function AddressScreen({ navigation }) {
       if (!coords) { Alert.alert('위치 권한 필요', '현재 위치를 사용하려면 위치 권한을 허용해주세요.'); return; }
       const addr = await reverseGeocode(coords.lat, coords.lng);
       if (!addr) { Alert.alert('주소를 찾지 못했어요', '잠시 후 다시 시도해주세요.'); return; }
-      setQuery('');
-      setShowResults(false);
       setLabelInput('');
       setAddModal({ address: addr, detail: '현재 위치' });
     } finally {
@@ -53,21 +42,9 @@ export default function AddressScreen({ navigation }) {
     }
   }
 
-  const filtered = query.trim()
-    ? SEARCH_RESULTS.filter(r =>
-        r.address.includes(query) || r.detail.includes(query)
-      )
-    : [];
-
-  function handleSearchFocus() {
-    setShowResults(true);
-  }
-
-  function handleSelectResult(result) {
-    setQuery('');
-    setShowResults(false);
+  function handlePostcodeSelect(address) {
     setLabelInput('');
-    setAddModal(result);
+    setAddModal({ address, detail: '' });
   }
 
   function handleConfirmAdd() {
@@ -106,112 +83,78 @@ export default function AddressScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* 검색바 */}
+      {/* 검색바 — 탭하면 다음(Daum) 우편번호 검색 모달 열림 */}
       <View style={styles.searchWrap}>
-        <View style={styles.searchBar}>
+        <TouchableOpacity
+          style={styles.searchBar}
+          activeOpacity={0.7}
+          onPress={() => setPostcodeVisible(true)}
+        >
           <Search size={15} color={colors.mediumGray} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="지번, 도로명, 건물명으로 검색"
-            placeholderTextColor={colors.mediumGray}
-            value={query}
-            onChangeText={t => { setQuery(t); setShowResults(true); }}
-            onFocus={handleSearchFocus}
-            returnKeyType="search"
-          />
-          {query.length > 0 && (
-            <TouchableOpacity onPress={() => { setQuery(''); setShowResults(false); }}>
-              <X size={14} color={colors.mediumGray} />
-            </TouchableOpacity>
-          )}
-        </View>
+          <Text style={styles.searchPlaceholder}>지번, 도로명, 건물명으로 검색</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* 검색 결과 or 주소 목록 — 검색바 바로 아래 일반 흐름으로 렌더 */}
-      {showResults ? (
-        <ScrollView style={styles.resultsScroll} keyboardShouldPersistTaps="handled">
-          <TouchableOpacity
-            style={styles.resultCurrentBtn}
-            onPress={handleUseCurrentLocation}
-            disabled={locating}
-          >
-            <Navigation2 size={16} color={locating ? colors.mediumGray : colors.primaryGreen} />
-            <Text style={styles.resultCurrentText}>{locating ? '위치 찾는 중…' : '현재 위치로 찾기'}</Text>
-          </TouchableOpacity>
-          {filtered.map((r, i) => (
-            <TouchableOpacity
-              key={i}
-              style={styles.resultRow}
-              onPress={() => handleSelectResult(r)}
-            >
-              <MapPin size={15} color={colors.mediumGray} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.resultAddr}>{r.address}</Text>
-                <Text style={styles.resultDetail}>{r.detail}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-          {query.length > 0 && filtered.length === 0 && (
-            <View style={styles.noResult}>
-              <Text style={styles.noResultText}>검색 결과가 없습니다</Text>
-            </View>
-          )}
-        </ScrollView>
-      ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-          {/* 현재 위치로 찾기 */}
-          <TouchableOpacity style={styles.gpsBtn} onPress={handleUseCurrentLocation} disabled={locating}>
-            <Navigation2 size={18} color={locating ? colors.mediumGray : colors.primaryGreen} />
-            <Text style={styles.gpsBtnText}>{locating ? '위치 찾는 중…' : '현재 위치로 찾기'}</Text>
-          </TouchableOpacity>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+        {/* 현재 위치로 찾기 */}
+        <TouchableOpacity style={styles.gpsBtn} onPress={handleUseCurrentLocation} disabled={locating}>
+          <Navigation2 size={18} color={locating ? colors.mediumGray : colors.primaryGreen} />
+          <Text style={styles.gpsBtnText}>{locating ? '위치 찾는 중…' : '현재 위치로 찾기'}</Text>
+        </TouchableOpacity>
 
-          {/* 저장된 주소 목록 */}
-          <View style={styles.addrList}>
-            {addresses.map((addr, idx) => {
-              const isSelected = currentAddress?.id === addr.id;
-              return (
-                <View
-                  key={addr.id}
-                  style={[styles.addrRow, idx < addresses.length - 1 && styles.addrRowBorder]}
+        {/* 저장된 주소 목록 */}
+        <View style={styles.addrList}>
+          {addresses.map((addr, idx) => {
+            const isSelected = currentAddress?.id === addr.id;
+            return (
+              <View
+                key={addr.id}
+                style={[styles.addrRow, idx < addresses.length - 1 && styles.addrRowBorder]}
+              >
+                <TouchableOpacity
+                  style={styles.addrMain}
+                  onPress={() => { handleSelectAddress(addr.id); navigation.goBack(); }}
+                  activeOpacity={0.7}
                 >
-                  <TouchableOpacity
-                    style={styles.addrMain}
-                    onPress={() => { handleSelectAddress(addr.id); navigation.goBack(); }}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.addrIconWrap, isSelected && styles.addrIconWrapActive]}>
-                      <IconComp icon={addr.icon} size={17} color={isSelected ? colors.primaryGreen : colors.mediumGray} />
+                  <View style={[styles.addrIconWrap, isSelected && styles.addrIconWrapActive]}>
+                    <IconComp icon={addr.icon} size={17} color={isSelected ? colors.primaryGreen : colors.mediumGray} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.addrLabelRow}>
+                      <Text style={[styles.addrLabel, isSelected && styles.addrLabelActive]}>
+                        {addr.label}
+                      </Text>
+                      {isSelected && (
+                        <View style={styles.currentBadge}>
+                          <Text style={styles.currentBadgeText}>현재 설정된 주소</Text>
+                        </View>
+                      )}
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <View style={styles.addrLabelRow}>
-                        <Text style={[styles.addrLabel, isSelected && styles.addrLabelActive]}>
-                          {addr.label}
-                        </Text>
-                        {isSelected && (
-                          <View style={styles.currentBadge}>
-                            <Text style={styles.currentBadgeText}>현재 설정된 주소</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.addrText} numberOfLines={2}>{addr.address}</Text>
-                    </View>
-                    {isSelected && (
-                      <Check size={18} color={colors.primaryGreen} style={{ flexShrink: 0 }} />
-                    )}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.deleteBtn}
-                    onPress={() => confirmDelete(addr.id)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Trash2 size={15} color="#CCC" />
-                  </TouchableOpacity>
-                </View>
-              );
-            })}
-          </View>
-        </ScrollView>
-      )}
+                    <Text style={styles.addrText} numberOfLines={2}>{addr.address}</Text>
+                  </View>
+                  {isSelected && (
+                    <Check size={18} color={colors.primaryGreen} style={{ flexShrink: 0 }} />
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={() => confirmDelete(addr.id)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Trash2 size={15} color="#CCC" />
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+        </View>
+      </ScrollView>
+
+      {/* 다음 우편번호 검색 모달 */}
+      <DaumPostcodeModal
+        visible={postcodeVisible}
+        onClose={() => setPostcodeVisible(false)}
+        onSelect={handlePostcodeSelect}
+      />
 
       {/* 주소 추가 확인 모달 */}
       <Modal visible={!!addModal} transparent animationType="slide" onRequestClose={() => setAddModal(null)}>
@@ -274,24 +217,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.softGray, borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 11,
   },
-  searchInput: { flex: 1, fontSize: 14, color: colors.charcoalBlack },
-
-  resultsScroll: { flex: 1, backgroundColor: colors.white },
-  resultCurrentBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 20, paddingVertical: 16,
-    borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
-  },
-  resultCurrentText: { fontSize: 15, fontWeight: '700', color: colors.primaryGreen },
-  resultRow: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
-    paddingHorizontal: 20, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: '#F4F4F4',
-  },
-  resultAddr: { fontSize: 14, fontWeight: '600', color: colors.charcoalBlack, marginBottom: 2 },
-  resultDetail: { fontSize: 12, color: colors.mediumGray },
-  noResult: { alignItems: 'center', paddingTop: 40 },
-  noResultText: { fontSize: 14, color: colors.mediumGray },
+  searchPlaceholder: { flex: 1, fontSize: 14, color: colors.mediumGray },
 
   content: { padding: 16, paddingBottom: 60 },
 

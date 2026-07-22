@@ -4,25 +4,16 @@ import {
   TextInput, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Home, Building2, MapPin, Search, X, Navigation2 } from 'lucide-react-native';
+import { ArrowLeft, Home, Building2, MapPin, Navigation2 } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 import { getCurrentCoords, reverseGeocode } from '../lib/location';
+import DaumPostcodeModal from '../components/DaumPostcodeModal';
 
 const LABEL_PRESETS = [
   { key: 'home',     Icon: Home,      label: '우리집',   icon: 'home' },
   { key: 'building', Icon: Building2, label: '회사',     icon: 'building' },
   { key: 'custom',   Icon: MapPin,    label: '직접입력', icon: 'pin' },
-];
-
-const SEARCH_RESULTS = [
-  { address: '서울 강남구 테헤란로 152', detail: '강남파이낸스센터' },
-  { address: '서울 강남구 테헤란로 427', detail: '위워크타워' },
-  { address: '서울 강남구 역삼로 123', detail: '역삼빌딩' },
-  { address: '서울 마포구 와우산로 94', detail: '신촌아이파크' },
-  { address: '경기 성남시 분당구 정자일로 95', detail: '파크뷰아파트' },
-  { address: '서울 종로구 세종대로 209', detail: '광화문광장' },
-  { address: '서울 서초구 반포대로 222', detail: '서울성모병원' },
 ];
 
 function PseudoMap() {
@@ -53,8 +44,7 @@ export default function AddressDetailScreen({ route, navigation }) {
     initPreset.key === 'custom' ? address.label : ''
   );
   const [currentAddr, setCurrentAddr] = useState(address.address);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
+  const [postcodeVisible, setPostcodeVisible] = useState(false);
   const [locating, setLocating] = useState(false);
 
   async function handleUseCurrentLocation() {
@@ -65,23 +55,9 @@ export default function AddressDetailScreen({ route, navigation }) {
       const addr = await reverseGeocode(coords.lat, coords.lng);
       if (addr) {
         setCurrentAddr(addr);
-        setShowSearch(false);
-        setSearchQuery('');
       }
     }
     setLocating(false);
-  }
-
-  const filteredResults = searchQuery.trim()
-    ? SEARCH_RESULTS.filter(r =>
-        r.address.includes(searchQuery) || r.detail.includes(searchQuery)
-      )
-    : SEARCH_RESULTS;
-
-  function handleSelectResult(result) {
-    setCurrentAddr(result.address);
-    setSearchQuery('');
-    setShowSearch(false);
   }
 
   function handleSave() {
@@ -112,68 +88,31 @@ export default function AddressDetailScreen({ route, navigation }) {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* 현재 주소 + 변경 버튼 */}
+        {/* 현재 주소 + 변경/현재위치 버튼 */}
         <View style={styles.addrBox}>
           <View style={styles.addrRow}>
             <MapPin size={16} color={colors.primaryGreen} style={{ flexShrink: 0, marginTop: 2 }} />
             <Text style={styles.addrMain}>{currentAddr}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.changeAddrBtn}
-            onPress={() => { setShowSearch(s => !s); setSearchQuery(''); }}
-          >
-            <Text style={styles.changeAddrBtnText}>
-              {showSearch ? '취소' : '주소 변경'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* 주소 검색 섹션 */}
-        {showSearch && (
-          <View style={styles.searchSection}>
-            <View style={styles.searchBar}>
-              <Search size={15} color={colors.mediumGray} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="지번, 도로명, 건물명으로 검색"
-                placeholderTextColor={colors.mediumGray}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoFocus
-                returnKeyType="search"
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <X size={14} color={colors.mediumGray} />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <TouchableOpacity style={styles.gpsRow} onPress={handleUseCurrentLocation} disabled={locating}>
-              <Navigation2 size={15} color={locating ? colors.mediumGray : colors.primaryGreen} />
-              <Text style={styles.gpsText}>{locating ? '위치 찾는 중…' : '현재 위치로 찾기'}</Text>
+          <View style={styles.addrBtnRow}>
+            <TouchableOpacity
+              style={styles.changeAddrBtn}
+              onPress={() => setPostcodeVisible(true)}
+            >
+              <Text style={styles.changeAddrBtnText}>주소 변경</Text>
             </TouchableOpacity>
-
-            {filteredResults.map((r, i) => (
-              <TouchableOpacity
-                key={i}
-                style={[styles.resultRow, i < filteredResults.length - 1 && styles.resultRowBorder]}
-                onPress={() => handleSelectResult(r)}
-              >
-                <MapPin size={14} color={colors.mediumGray} style={{ flexShrink: 0, marginTop: 2 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.resultAddr}>{r.address}</Text>
-                  <Text style={styles.resultDetail}>{r.detail}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-            {searchQuery.length > 0 && filteredResults.length === 0 && (
-              <View style={styles.noResult}>
-                <Text style={styles.noResultText}>검색 결과가 없습니다</Text>
-              </View>
-            )}
+            <TouchableOpacity
+              style={styles.changeAddrBtn}
+              onPress={handleUseCurrentLocation}
+              disabled={locating}
+            >
+              <Navigation2 size={14} color={locating ? colors.mediumGray : colors.primaryGreen} />
+              <Text style={styles.changeAddrBtnText}>
+                {locating ? '위치 찾는 중…' : '현재 위치로 찾기'}
+              </Text>
+            </TouchableOpacity>
           </View>
-        )}
+        </View>
 
         {/* 라벨 선택 */}
         <Text style={styles.sectionLabel}>장소 이름</Text>
@@ -218,6 +157,13 @@ export default function AddressDetailScreen({ route, navigation }) {
           <Text style={styles.saveBtnText}>주소 저장</Text>
         </TouchableOpacity>
       </View>
+
+      {/* 다음 우편번호 검색 모달 */}
+      <DaumPostcodeModal
+        visible={postcodeVisible}
+        onClose={() => setPostcodeVisible(false)}
+        onSelect={addr => setCurrentAddr(addr)}
+      />
     </SafeAreaView>
   );
 }
@@ -265,42 +211,13 @@ const styles = StyleSheet.create({
   },
   addrRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 10 },
   addrMain: { flex: 1, fontSize: 16, fontWeight: '800', color: colors.charcoalBlack, lineHeight: 24 },
+  addrBtnRow: { flexDirection: 'row', gap: 8 },
   changeAddrBtn: {
-    alignSelf: 'flex-start',
+    flexDirection: 'row', alignItems: 'center', gap: 5,
     borderWidth: 1.5, borderColor: colors.primaryGreen, borderRadius: 8,
     paddingHorizontal: 14, paddingVertical: 7,
   },
   changeAddrBtnText: { fontSize: 13, fontWeight: '700', color: colors.primaryGreen },
-
-  searchSection: {
-    backgroundColor: colors.softGray, borderRadius: 14,
-    marginBottom: 20, overflow: 'hidden',
-  },
-  searchBar: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: colors.white,
-    margin: 12, borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 10,
-    borderWidth: 1.5, borderColor: colors.primaryGreen,
-  },
-  searchInput: { flex: 1, fontSize: 14, color: colors.charcoalBlack },
-  gpsRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#E8E8E8',
-    backgroundColor: colors.white, marginHorizontal: 12, borderRadius: 10, marginBottom: 8,
-  },
-  gpsText: { fontSize: 14, fontWeight: '700', color: colors.primaryGreen },
-  resultRow: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
-    paddingHorizontal: 16, paddingVertical: 13,
-    backgroundColor: colors.white, marginHorizontal: 12,
-  },
-  resultRowBorder: { borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  resultAddr: { fontSize: 14, fontWeight: '600', color: colors.charcoalBlack, marginBottom: 2 },
-  resultDetail: { fontSize: 12, color: colors.mediumGray },
-  noResult: { alignItems: 'center', paddingVertical: 24 },
-  noResultText: { fontSize: 14, color: colors.mediumGray },
 
   sectionLabel: { fontSize: 13, fontWeight: '700', color: colors.mediumGray, marginBottom: 10 },
   presetRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
