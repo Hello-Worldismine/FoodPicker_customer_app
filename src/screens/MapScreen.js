@@ -76,9 +76,15 @@ export default function MapScreen({ navigation }) {
   const mapStores = filteredStores.filter(s => s.lat != null && s.lng != null);
   const markers = mapStores.map(s => ({ lat: s.lat, lng: s.lng, title: s.name, status: s.status }));
 
-  const storeProducts = selectedStore
+  const sellingProducts = selectedStore
     ? productList.filter(p => p.storeId === selectedStore.id && p.status === 'selling' && p.stock > 0)
     : [];
+  const soldoutProducts = selectedStore
+    ? productList.filter(p => p.storeId === selectedStore.id && (p.status === 'soldout' || p.stock === 0))
+    : [];
+  const displayProducts = sellingProducts.length > 0 ? sellingProducts : soldoutProducts;
+  const isAllSoldout = sellingProducts.length === 0 && soldoutProducts.length > 0;
+  const hasNoProducts = sellingProducts.length === 0 && soldoutProducts.length === 0;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -168,52 +174,72 @@ export default function MapScreen({ navigation }) {
         {/* 선택된 매장 미니 카드 */}
         {selectedStore && (
           <View style={styles.miniCard}>
+            {/* 헤더 */}
             <View style={styles.miniCardHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.miniCardName}>{selectedStore.name}</Text>
                 <Text style={styles.miniCardMeta}>
-                  남은 상품 {selectedStore.productCount}개 · {selectedStore.distance >= 1000
+                  {selectedStore.distance >= 1000
                     ? `${(selectedStore.distance / 1000).toFixed(1)}km`
                     : `${selectedStore.distance}m`}
+                  {selectedStore.pickupTime ? ` · 픽업 ${selectedStore.pickupTime}` : ''}
                 </Text>
-                <Text style={styles.miniCardPickup}>픽업 가능 {selectedStore.pickupTime}</Text>
               </View>
               <TouchableOpacity onPress={() => setSelectedStore(null)} style={{ padding: 4 }}>
                 <X size={20} color={colors.mediumGray} />
               </TouchableOpacity>
             </View>
 
-            {storeProducts.length > 0 && (
+            {/* 상품 영역 */}
+            {hasNoProducts ? (
+              <View style={styles.miniEmptyBox}>
+                <Text style={styles.miniEmptyText}>등록된 상품이 없습니다</Text>
+              </View>
+            ) : (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 style={styles.miniProductScroll}
                 contentContainerStyle={{ gap: 8, paddingRight: 4 }}
               >
-                {storeProducts.slice(0, 3).map(p => (
-                  <TouchableOpacity
-                    key={p.id}
-                    style={styles.miniProduct}
-                    onPress={() => navigation.navigate('ProductDetail', { productId: p.id })}
-                  >
-                    <View style={styles.miniProductImg}>
-                      {p.image
-                        ? <Image source={{ uri: p.image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-                        : <Text style={styles.miniProductEmoji}>{p.emoji}</Text>
-                      }
-                    </View>
-                    <Text style={styles.miniProductName} numberOfLines={1}>{p.name}</Text>
-                    <Text style={styles.miniProductPrice}>{p.salePrice.toLocaleString()}원</Text>
-                  </TouchableOpacity>
-                ))}
+                {displayProducts.slice(0, 4).map(p => {
+                  const soldout = isAllSoldout;
+                  return (
+                    <TouchableOpacity
+                      key={p.id}
+                      style={styles.miniProduct}
+                      onPress={() => !soldout && navigation.navigate('ProductDetail', { productId: p.id })}
+                      activeOpacity={soldout ? 1 : 0.7}
+                    >
+                      <View style={[styles.miniProductImg, soldout && styles.miniProductImgDim]}>
+                        {p.image
+                          ? <Image source={{ uri: p.image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                          : <Text style={styles.miniProductEmoji}>{p.emoji}</Text>
+                        }
+                        {soldout && (
+                          <View style={styles.miniSoldoutOverlay}>
+                            <Text style={styles.miniSoldoutText}>품절</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={[styles.miniProductName, soldout && { color: colors.mediumGray }]} numberOfLines={1}>
+                        {p.name}
+                      </Text>
+                      <Text style={[styles.miniProductPrice, soldout && { color: colors.mediumGray }]}>
+                        {soldout ? '품절' : `${p.salePrice.toLocaleString()}원`}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
             )}
 
+            {/* 매장 상세보기 버튼 */}
             <TouchableOpacity
               style={styles.miniCardBtn}
               onPress={() => navigation.navigate('Store', { storeId: selectedStore.id })}
             >
-              <Text style={styles.miniCardBtnText}>상품 보기</Text>
+              <Text style={styles.miniCardBtnText}>매장 상세보기</Text>
               <ChevronRight size={16} color={colors.white} />
             </TouchableOpacity>
           </View>
@@ -281,8 +307,13 @@ const styles = StyleSheet.create({
   },
   miniCardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
   miniCardName: { fontSize: 16, fontWeight: '800', color: colors.charcoalBlack, marginBottom: 4 },
-  miniCardMeta: { fontSize: 13, color: colors.mediumGray, marginBottom: 2 },
-  miniCardPickup: { fontSize: 13, color: colors.charcoalBlack },
+  miniCardMeta: { fontSize: 13, color: colors.mediumGray },
+
+  miniEmptyBox: {
+    height: 72, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.softGray, borderRadius: 10, marginBottom: 12,
+  },
+  miniEmptyText: { fontSize: 13, color: colors.mediumGray },
 
   miniProductScroll: { marginBottom: 12 },
   miniProduct: { backgroundColor: colors.softGray, borderRadius: 10, overflow: 'hidden', minWidth: 110 },
@@ -290,9 +321,16 @@ const styles = StyleSheet.create({
     width: '100%', height: 80, backgroundColor: '#E8F0E8',
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
+  miniProductImgDim: { opacity: 0.5 },
   miniProductEmoji: { fontSize: 32 },
   miniProductName: { fontSize: 12, fontWeight: '700', color: colors.charcoalBlack, marginBottom: 2, paddingHorizontal: 8, paddingTop: 6 },
   miniProductPrice: { fontSize: 13, fontWeight: '800', color: colors.primaryGreen, paddingHorizontal: 8, paddingBottom: 8 },
+  miniSoldoutOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  miniSoldoutText: { fontSize: 12, fontWeight: '800', color: colors.white },
 
   miniCardBtn: {
     backgroundColor: colors.primaryGreen, borderRadius: 12, padding: 13,

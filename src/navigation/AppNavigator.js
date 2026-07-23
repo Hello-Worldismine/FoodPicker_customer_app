@@ -36,6 +36,7 @@ import PaymentMethodScreen from '../screens/PaymentMethodScreen';
 import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
 import SupportScreen from '../screens/SupportScreen';
 import FAQScreen from '../screens/FAQScreen';
+import InquiryScreen from '../screens/InquiryScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -111,6 +112,7 @@ export default function AppNavigator() {
         <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
         <Stack.Screen name="Support" component={SupportScreen} />
         <Stack.Screen name="FAQ" component={FAQScreen} />
+        <Stack.Screen name="Inquiry" component={InquiryScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -67,7 +67,22 @@ export default function OrderCompleteScreen({ navigation, route }) {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.ordersBtn}
-              onPress={() => navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] })}
+              onPress={() => navigation.reset({
+                index: 0,
+                routes: [{
+                  name: 'MainTabs',
+                  state: {
+                    index: 3,
+                    routes: [
+                      { name: 'Home' },
+                      { name: 'Map' },
+                      { name: 'Liked' },
+                      { name: 'Orders', params: { initialTab: 'pending' } },
+                      { name: 'MyPage' },
+                    ],
+                  },
+                }],
+              })}
             >
               <ClipboardList size={16} color={colors.white} />
               <Text style={styles.ordersBtnText}>주문내역 보기</Text>

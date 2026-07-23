@@ -3,24 +3,32 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Phone, Mail, Clock, ChevronRight, ExternalLink } from 'lucide-react-native';
+import { ArrowLeft, Phone, Mail, MessageSquare, Clock, ChevronRight, ExternalLink } from 'lucide-react-native';
 import { colors } from '../theme';
 
 // 실시간 채팅 상담은 보류(챗 백엔드 미연동) → 노출하지 않음.
 const CHANNELS = [
+  {
+    Icon: MessageSquare,
+    label: '1:1 문의',
+    desc: '답변까지 1~2일 소요',
+    badge: null,
+    // 관리자 웹 신고/문의관리(reports)와 연동된 앱 내 문의 작성 화면으로 이동
+    screen: 'Inquiry',
+  },
+  {
+    Icon: Mail,
+    label: '이메일 문의',
+    desc: 'foodpicker77@gmail.com',
+    badge: null,
+    onPress: () => Linking.openURL('mailto:foodpicker77@gmail.com'),
+  },
   {
     Icon: Phone,
     label: '전화 상담',
     desc: '1800-8018',
     badge: null,
     onPress: () => Linking.openURL('tel:18008018'),
-  },
-  {
-    Icon: Mail,
-    label: '이메일 문의',
-    desc: 'help@foodpicker.kr',
-    badge: null,
-    onPress: () => Linking.openURL('mailto:help@foodpicker.kr'),
   },
 ];
 
@@ -58,7 +66,7 @@ export default function SupportScreen({ navigation }) {
               <TouchableOpacity
                 key={ch.label}
                 style={[styles.row, idx < CHANNELS.length - 1 && styles.rowBorder]}
-                onPress={ch.onPress}
+                onPress={ch.screen ? () => navigation.navigate(ch.screen) : ch.onPress}
                 activeOpacity={0.7}
               >
                 <View style={styles.iconWrap}>

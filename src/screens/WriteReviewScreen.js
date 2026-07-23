@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, Image,
 } from 'react-native';
@@ -7,7 +7,7 @@ import { ArrowLeft, Star, Camera, X, CheckCircle } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
-import { uploadReviewImage } from '../lib/api';
+import { uploadReviewImage, fetchProductMedia } from '../lib/api';
 
 const MAX_PHOTOS = 5;
 const MIN_TEXT = 10;
@@ -66,7 +66,22 @@ const sv = StyleSheet.create({
 
 export default function WriteReviewScreen({ navigation, route }) {
   const { order } = route.params;
-  const { submitReview } = useApp();
+  const { submitReview, productList } = useApp();
+  // 주문 스냅샷(orders)에는 이미지가 없어 카탈로그에서 상품 이미지를 조회.
+  // 리뷰 시점엔 상품이 품절/판매종료로 카탈로그(public_products=selling 전용)에 없는 경우가
+  // 일반적이라, 그때는 상태 무관 미디어 뷰(public_product_media)로 단건 폴백 조회한다.
+  const product = productList.find(p => p.id === order?.productId);
+  const [media, setMedia] = useState(null);
+  useEffect(() => {
+    if (product || !order?.productId) return;
+    let alive = true;
+    fetchProductMedia(order.productId)
+      .then(m => { if (alive && m) setMedia(m); })
+      .catch(() => {}); // 실패 시 이모지 폴백
+    return () => { alive = false; };
+  }, [product, order?.productId]);
+  const productImage = product?.image || media?.image || null;
+  const productEmoji = product?.emoji || media?.emoji || '🛍️';
   const [rating, setRating] = useState(0);
   const [text, setText] = useState('');
   const [photos, setPhotos] = useState([]);
@@ -142,11 +157,15 @@ export default function WriteReviewScreen({ navigation, route }) {
         <View style={styles.card}>
           <View style={styles.orderSummary}>
             <View style={styles.orderIcon}>
-              <Text style={{ fontSize: 22 }}>🛍️</Text>
+              {productImage ? (
+                <Image source={{ uri: productImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+              ) : (
+                <Text style={{ fontSize: 22 }}>{productEmoji}</Text>
+              )}
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.orderName} numberOfLines={1}>{order?.productName}</Text>
-              <Text style={styles.orderMeta}>{order?.store} · {order?.pickupTime}</Text>
+              <Text style={styles.orderMeta}>{order?.store}</Text>
             </View>
           </View>
         </View>
@@ -236,7 +255,7 @@ const styles = StyleSheet.create({
   orderSummary: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   orderIcon: {
     width: 48, height: 48, borderRadius: 12, backgroundColor: colors.freshMint,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden',
   },
   orderName: { fontSize: 15, fontWeight: '800', color: colors.charcoalBlack },
   orderMeta: { fontSize: 12, color: colors.mediumGray, marginTop: 3 },

@@ -268,10 +268,10 @@ export default function HomeScreen({ navigation }) {
             scrollEventThrottle={16}
             onMomentumScrollEnd={e => setBannerIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W))}
             renderItem={({ item }) => (
-              <View style={{ width: SCREEN_W, paddingHorizontal: 16 }}>
+              <View style={{ width: SCREEN_W }}>
                 {item.imageUrl ? (
                   <TouchableOpacity activeOpacity={0.85} onPress={() => goCategory(bannerCategory(item.link))}>
-                    <Image source={{ uri: item.imageUrl }} style={styles.banner} resizeMode="cover" />
+                    <Image source={{ uri: item.imageUrl }} style={styles.bannerImg} resizeMode="cover" />
                   </TouchableOpacity>
                 ) : (
                   <LinearGradient colors={item.bg} style={styles.banner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
@@ -290,11 +290,11 @@ export default function HomeScreen({ navigation }) {
               </View>
             )}
           />
-          <View style={styles.indicators}>
-            {banners.map((_, i) => (
-              <View key={i} style={[styles.dot, i === bannerIndex && styles.dotActive]} />
-            ))}
-          </View>
+          {banners.length > 1 && (
+            <View style={styles.pageCounter} pointerEvents="none">
+              <Text style={styles.pageCounterText}>{bannerIndex + 1}/{banners.length}</Text>
+            </View>
+          )}
         </View>
 
         {/* 카테고리 그리드 */}
@@ -431,11 +431,13 @@ const styles = StyleSheet.create({
   searchPlaceholder: { fontSize: 14, color: colors.mediumGray },
 
   /* 배너 */
-  bannerWrap: { paddingTop: 20 },
+  bannerWrap: { paddingTop: 0, position: 'relative' },
+  bannerImg: { width: SCREEN_W, height: 200 },
   banner: {
-    borderRadius: 20, padding: 24,
+    width: SCREEN_W, height: 200,
+    paddingHorizontal: 24, paddingVertical: 20,
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', height: 160, overflow: 'hidden',
+    justifyContent: 'space-between', overflow: 'hidden',
   },
   bannerCircle1: {
     position: 'absolute', right: -20, top: -20,
@@ -446,7 +448,7 @@ const styles = StyleSheet.create({
     width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.1)',
   },
   bannerContent: { flex: 1 },
-  bannerTitle: { fontSize: 18, fontWeight: '800', color: colors.white, lineHeight: 26, marginBottom: 8 },
+  bannerTitle: { fontSize: 20, fontWeight: '900', color: colors.white, lineHeight: 28, marginBottom: 6 },
   bannerDesc: { fontSize: 13, color: 'rgba(255,255,255,0.88)', marginBottom: 16 },
   bannerBtn: {
     backgroundColor: 'rgba(255,255,255,0.22)',
@@ -455,14 +457,19 @@ const styles = StyleSheet.create({
   },
   bannerBtnText: { fontSize: 13, fontWeight: '700', color: colors.white },
   bannerEmoji: { fontSize: 52, marginLeft: 8, flexShrink: 0, lineHeight: 60 },
-  indicators: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 10 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#D0D3D7' },
-  dotActive: { width: 20, backgroundColor: colors.primaryGreen, borderRadius: 3 },
+  pageCounter: {
+    position: 'absolute', bottom: 30, right: 14,
+    backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 10,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  pageCounterText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 
   /* 카테고리 그리드 */
   catSection: {
-    backgroundColor: colors.white, marginTop: 16,
+    backgroundColor: colors.white, marginTop: -20,
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
     paddingHorizontal: 16, paddingTop: 22, paddingBottom: 8,
+    zIndex: 1,
   },
   catGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   catItem: {

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Ticket } from 'lucide-react-native';
+import { ArrowLeft, Ticket, X } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
+import { previewCoupon } from '../lib/api';
 
 const TABS = [
   { key: 'available', label: '사용 가능' },
@@ -56,20 +57,37 @@ export default function CouponScreen({ navigation }) {
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState('');
   const [codeSuccess, setCodeSuccess] = useState('');
+  const [previewing, setPreviewing] = useState(false);
   const [registering, setRegistering] = useState(false);
+  const [preview, setPreview] = useState(null);
 
   async function handleRegister() {
     const c = code.trim();
     if (!c) { setCodeError('쿠폰 코드를 입력해주세요.'); setCodeSuccess(''); return; }
-    if (registering) return;
-    setRegistering(true);
+    if (previewing) return;
+    setPreviewing(true);
     setCodeError(''); setCodeSuccess('');
     try {
-      await redeemCoupon(c);
-      setCodeSuccess('쿠폰이 등록되었습니다.');
-      setCode('');
+      const info = await previewCoupon(c);
+      setPreview(info);
     } catch {
       setCodeError('유효하지 않은 쿠폰 코드입니다.');
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
+  async function handleConfirm() {
+    if (registering) return;
+    setRegistering(true);
+    try {
+      await redeemCoupon(code.trim());
+      setPreview(null);
+      setCode('');
+      setCodeSuccess('쿠폰이 등록되었습니다.');
+    } catch {
+      setPreview(null);
+      setCodeError('쿠폰 등록에 실패했습니다. 다시 시도해주세요.');
     } finally {
       setRegistering(false);
     }
@@ -87,6 +105,52 @@ export default function CouponScreen({ navigation }) {
         <Text style={styles.headerCount}>{coupons.length}장 보유</Text>
       </View>
 
+      {/* 쿠폰 미리보기 팝업 */}
+      <Modal transparent visible={!!preview} animationType="fade" onRequestClose={() => setPreview(null)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setPreview(null)}>
+          <Pressable style={styles.modalBox} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>쿠폰 확인</Text>
+              <TouchableOpacity onPress={() => setPreview(null)} style={styles.modalClose}>
+                <X size={18} color={colors.mediumGray} />
+              </TouchableOpacity>
+            </View>
+            {preview && (
+              <>
+                <View style={styles.modalCouponIcon}>
+                  <Ticket size={28} color={colors.primaryGreen} />
+                </View>
+                <Text style={styles.modalDiscount}>{discountLabel(preview)}</Text>
+                <Text style={styles.modalName}>{preview.name}</Text>
+                <View style={styles.modalMeta}>
+                  {!!preview.minOrderAmount && (
+                    <Text style={styles.modalMetaText}>최소 주문 {preview.minOrderAmount.toLocaleString()}원</Text>
+                  )}
+                  {!!preview.endDate && (
+                    <Text style={styles.modalMetaText}>유효기간 ~{preview.endDate}</Text>
+                  )}
+                  {preview.allowStacking && (
+                    <Text style={[styles.modalMetaText, { color: '#3B82F6' }]}>중복 사용 가능</Text>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={[styles.modalConfirmBtn, registering && { opacity: 0.6 }]}
+                  onPress={handleConfirm}
+                  disabled={registering}
+                >
+                  {registering
+                    ? <ActivityIndicator color={colors.white} />
+                    : <Text style={styles.modalConfirmText}>쿠폰 등록</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setPreview(null)}>
+                  <Text style={styles.modalCancelText}>취소</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
 
         {/* 쿠폰 코드 등록 */}
@@ -101,8 +165,10 @@ export default function CouponScreen({ navigation }) {
               style={[styles.codeInput, codeError && { borderColor: colors.alertRed }]}
               placeholderTextColor={colors.mediumGray}
             />
-            <TouchableOpacity onPress={handleRegister} style={styles.codeBtn}>
-              <Text style={styles.codeBtnText}>등록</Text>
+            <TouchableOpacity onPress={handleRegister} style={styles.codeBtn} disabled={previewing}>
+              {previewing
+                ? <ActivityIndicator color={colors.white} size="small" />
+                : <Text style={styles.codeBtnText}>등록</Text>}
             </TouchableOpacity>
           </View>
           {!!codeError && <Text style={styles.codeError}>{codeError}</Text>}
@@ -200,4 +266,32 @@ const styles = StyleSheet.create({
   couponBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
   couponCondition: { fontSize: 12, color: colors.mediumGray },
   couponDate: { fontSize: 12, fontWeight: '600', color: colors.charcoalBlack },
+
+  /* 쿠폰 미리보기 팝업 */
+  modalBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center',
+  },
+  modalBox: {
+    width: '82%', backgroundColor: colors.white, borderRadius: 20,
+    padding: 24, alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 10,
+  },
+  modalHeader: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  modalTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '800', color: colors.charcoalBlack },
+  modalClose: { position: 'absolute', right: 0, padding: 4 },
+  modalCouponIcon: {
+    width: 64, height: 64, borderRadius: 20, backgroundColor: colors.freshMint,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 14,
+  },
+  modalDiscount: { fontSize: 24, fontWeight: '900', color: colors.primaryGreen, marginBottom: 6 },
+  modalName: { fontSize: 14, fontWeight: '600', color: colors.charcoalBlack, marginBottom: 14, textAlign: 'center' },
+  modalMeta: { width: '100%', backgroundColor: colors.softGray, borderRadius: 10, padding: 12, gap: 4, marginBottom: 20 },
+  modalMetaText: { fontSize: 13, color: colors.mediumGray, textAlign: 'center' },
+  modalConfirmBtn: {
+    width: '100%', backgroundColor: colors.primaryGreen, borderRadius: 12,
+    paddingVertical: 14, alignItems: 'center', marginBottom: 8,
+  },
+  modalConfirmText: { fontSize: 15, fontWeight: '800', color: colors.white },
+  modalCancelBtn: { paddingVertical: 8 },
+  modalCancelText: { fontSize: 14, color: colors.mediumGray },
 });

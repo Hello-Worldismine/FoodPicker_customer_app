@@ -38,20 +38,20 @@ function buildHtml({ lat, lng, zoom, markers, interactive }) {
           disableDoubleTapZoom: ${!interactive},
           disableTwoFingerTapZoom: ${!interactive}
         });
-        naver.maps.Event.addListener(map, 'click', function(){ post('tap'); });
+        var markerJustClicked = false;
+        naver.maps.Event.addListener(map, 'click', function(){ if (!markerJustClicked) post('tap'); });
         MARKERS.forEach(function(m, i) {
           var color = STATUS_COLOR[m.status] || '#22A06B';
           var label = (m.title || '').split(' ')[0] || '';
-          var mk = new naver.maps.Marker({
+          new naver.maps.Marker({
             position: new naver.maps.LatLng(m.lat, m.lng),
             map: map,
             title: m.title,
             icon: {
-              content: '<div style="background:' + color + ';color:#fff;padding:4px 9px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.25);cursor:pointer">' + label + '</div>',
+              content: '<div onclick="event.stopPropagation(); markerJustClicked=true; post(&apos;marker:' + i + '&apos;); setTimeout(function(){markerJustClicked=false;},300);" style="background:' + color + ';color:#fff;padding:4px 9px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.25);cursor:pointer">' + label + '</div>',
               anchor: new naver.maps.Point(0, 20)
             }
           });
-          naver.maps.Event.addListener(mk, 'click', function(e){ e.stop(); post('marker:' + i); });
         });
         post('ready');
       } catch (e) { post('error:' + (e && e.message)); }
