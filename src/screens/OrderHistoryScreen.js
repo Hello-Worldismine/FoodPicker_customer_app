@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal,
 } from 'react-native';
@@ -25,9 +25,13 @@ const TABS = [
 
 // TODO: 주문 목록을 GET /api/orders?status={tab}&page={page} 로 페이지네이션 처리하세요.
 //       실시간 상태 변경(픽업 완료 등)은 WebSocket 또는 주기적 폴링으로 처리 권장.
-export default function OrderHistoryScreen({ navigation }) {
+export default function OrderHistoryScreen({ navigation, route }) {
   const { orders, handleCancelOrder } = useApp();
-  const [tab, setTab] = useState('pending');
+  const [tab, setTab] = useState(route?.params?.initialTab ?? 'pending');
+
+  useEffect(() => {
+    if (route?.params?.initialTab) setTab(route.params.initialTab);
+  }, [route?.params?.initialTab]);
   const [showQR, setShowQR] = useState(null);
   const [showCancel, setShowCancel] = useState(null);
 
