@@ -18,9 +18,11 @@ function formatDate(iso) {
   return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
-function formatTime(iso) {
-  const d = new Date(iso);
-  return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+function fmtDeadline(minutes) {
+  if (!minutes) return '';
+  if (minutes < 60) return `주문 후 ${minutes}분 이내`;
+  if (minutes % 60 === 0) return `주문 후 ${minutes / 60}시간 이내`;
+  return `주문 후 ${Math.floor(minutes / 60)}시간 ${minutes % 60}분 이내`;
 }
 
 // TODO: 상품 상세를 GET /api/products/:productId 로 교체하세요.
@@ -43,14 +45,13 @@ export default function ProductDetailScreen({ route, navigation }) {
 
   const now = new Date();
   const isExpired = new Date(product.expiryDate) < now;
-  const isPickupEnded = new Date(product.pickupEnd) < now;
   const isSoldout = product.status === 'soldout' || product.stock === 0;
-  const unavailable = isExpired || isPickupEnded || isSoldout;
+  const unavailable = isExpired || isSoldout;
 
   let btnLabel = `${(product.salePrice * qty).toLocaleString()}원 예약하기`;
   let btnDisabled = false;
   if (isSoldout) { btnLabel = '품절된 상품입니다'; btnDisabled = true; }
-  if (isPickupEnded || isExpired) { btnLabel = '판매가 종료되었습니다'; btnDisabled = true; }
+  if (isExpired) { btnLabel = '판매가 종료되었습니다'; btnDisabled = true; }
 
   function handleShare() {
     const msg = [
@@ -67,7 +68,7 @@ export default function ProductDetailScreen({ route, navigation }) {
     { key: 'allergy',     label: '알레르기 정보', content: product.allergyInfo },
     { key: 'storage',     label: '보관 방법',   content: product.storageMethod },
     { key: 'expiry',      label: '소비기한',    content: formatDate(product.expiryDate) },
-    { key: 'pickupTime',  label: '픽업 가능 시간', content: `${formatTime(product.pickupStart)} ~ ${formatTime(product.pickupEnd)}` },
+    { key: 'pickupDeadline', label: '픽업 마감', content: fmtDeadline(product.pickupDeadlineMinutes) },
     { key: 'cancel',      label: '취소/환불 규정', content: product.cancelPolicy },
     ...(product.storeNotice ? [{ key: 'notice', label: '매장 공지', content: product.storeNotice }] : []),
   ];
@@ -158,7 +159,7 @@ export default function ProductDetailScreen({ route, navigation }) {
           <View style={styles.infoGrid}>
             {[
               { label: '남은 수량',      value: isSoldout ? '품절' : `${product.stock}개`, warn: isSoldout },
-              { label: '픽업 가능 시간', value: `${formatTime(product.pickupStart)}~${formatTime(product.pickupEnd)}` },
+              { label: '픽업 마감', value: fmtDeadline(product.pickupDeadlineMinutes) },
               { label: '소비기한',       value: formatDate(product.expiryDate), warn: isExpired },
               { label: '보관 방법',      value: product.storage },
             ].map(item => (

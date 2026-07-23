@@ -211,7 +211,6 @@ export default function StoreScreen({ route, navigation }) {
             { icon: <MapPin size={15} color={colors.mediumGray} />, label: '주소',    value: store.address },
             { icon: <Phone size={15} color={colors.mediumGray} />, label: '전화',    value: store.phone },
             { icon: <Clock size={15} color={colors.mediumGray} />, label: '영업시간', value: store.businessHours },
-            { icon: <Clock size={15} color={colors.warmOrange} />, label: '픽업시간', value: store.pickupTime, highlight: true },
           ].map((item, idx, arr) => (
             <View key={item.label} style={[styles.infoRow, idx < arr.length - 1 && styles.infoRowBorder]}>
               <View style={styles.infoIconWrap}>{item.icon}</View>

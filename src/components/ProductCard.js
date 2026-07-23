@@ -3,12 +3,11 @@ import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Heart, Clock, Bell } from 'lucide-react-native';
 import { colors } from '../theme';
 
-function formatPickupTime(isoStart, isoEnd) {
-  const fmt = iso => {
-    const d = new Date(iso);
-    return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
-  };
-  return `${fmt(isoStart)}~${fmt(isoEnd)}`;
+function fmtDeadline(minutes) {
+  if (!minutes) return '';
+  if (minutes < 60) return `${minutes}분 이내`;
+  if (minutes % 60 === 0) return `${minutes / 60}시간 이내`;
+  return `${Math.floor(minutes / 60)}시간 ${minutes % 60}분 이내`;
 }
 
 export default function ProductCard({
@@ -94,7 +93,7 @@ export default function ProductCard({
             <View style={styles.pickupRow}>
               <Clock size={11} color={colors.warmOrange} />
               <Text style={styles.pickupText}>
-                픽업 {formatPickupTime(product.pickupStart, product.pickupEnd)}
+                주문 후 {fmtDeadline(product.pickupDeadlineMinutes)}
               </Text>
             </View>
           </View>

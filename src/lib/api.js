@@ -35,8 +35,7 @@ function mapProductRow(r, storeRow, favProducts) {
     salePrice: r.sale_price,
     discountRate: r.discount_rate,
     stock: r.stock,
-    pickupStart: r.pickup_start,
-    pickupEnd: r.pickup_end,
+    pickupDeadlineMinutes: r.pickup_deadline_minutes,
     expiryDate: r.expiry_date,
     storage: fmt.storageToDisplay(r.storage),
     status: r.status,
@@ -59,7 +58,6 @@ function mapProductRow(r, storeRow, favProducts) {
 
 function mapStoreRow(r, storeProductRows, favStores) {
   const selling = (storeProductRows || []).filter(p => p.status === 'selling');
-  const first = selling.find(p => p.pickup_start);
   const closingSoon = selling.some(p => {
     if (!p.expiry_date) return false;
     const h = (new Date(p.expiry_date) - new Date()) / 3600000;
@@ -83,7 +81,7 @@ function mapStoreRow(r, storeProductRows, favStores) {
     reviewCount: r.review_count || 0,
     businessHours: fmt.businessHoursLabel(r.open_hours),
     productCount: selling.length,
-    pickupTime: first ? `${hm(first.pickup_start)}~${hm(first.pickup_end)}` : '',
+    pickupTime: '',
     distance: fmt.distanceMeters(userLoc.lat, userLoc.lng, r.lat, r.lng) ?? 0,
     status: selling.length === 0 ? 'soldout' : closingSoon ? 'closing' : 'selling',
     liked: favStores.has(r.id),
@@ -98,7 +96,8 @@ function mapOrder(r) {
     store: r.store_name,
     storeId: r.store_id,
     storeAddress: r.store_address,
-    pickupTime: fmt.formatPickupWindow(r.pickup_start, r.pickup_end),
+    pickupDeadlineMinutes: r.pickup_deadline_minutes,
+    pickupDeadline: fmt.formatDeadlineTime(r.ordered_at, r.pickup_deadline_minutes),
     quantity: r.quantity,
     totalPrice: r.total_price,
     discountedPrice: r.amount,

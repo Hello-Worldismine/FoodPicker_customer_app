@@ -33,6 +33,12 @@ const CAT_ITEM_W = Math.floor((SCREEN_W - 32) / 4);
 const CARD_W = Math.floor(SCREEN_W * 0.44);
 const STORE_CARD_W = Math.floor(SCREEN_W * 0.52);
 
+function fmtDeadline(minutes) {
+  if (!minutes) return '';
+  if (minutes < 60) return `${minutes}분`;
+  if (minutes % 60 === 0) return `${minutes / 60}시간`;
+  return `${Math.floor(minutes / 60)}시간 ${minutes % 60}분`;
+}
 function fmtTime(iso) {
   const d = new Date(iso);
   return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -92,7 +98,7 @@ function SmallProductCard({ product, onPress, onLike }) {
             <View style={styles.footerChip}>
               <Clock size={9} color={colors.warmOrange} />
               <Text style={[styles.footerText, { color: colors.warmOrange }]}>
-                {fmtTime(product.pickupStart)}~{fmtTime(product.pickupEnd)}
+                {fmtDeadline(product.pickupDeadlineMinutes)} 이내
               </Text>
             </View>
             <View style={styles.footerChip}>
@@ -151,12 +157,6 @@ function StoreCard({ store, onPress }) {
             <Star size={12} color="#FACC15" fill="#FACC15" />
             <Text style={styles.storeRatingVal}>{store.rating}</Text>
             <Text style={styles.storeRatingCnt}>({store.reviewCount})</Text>
-          </View>
-
-          {/* 픽업시간 */}
-          <View style={styles.storeInfoRow}>
-            <Clock size={11} color={colors.mediumGray} />
-            <Text style={styles.storeInfoText}>픽업시간 {store.pickupTime}</Text>
           </View>
 
           {/* 거리 + 도보 */}

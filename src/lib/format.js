@@ -39,7 +39,26 @@ export function distanceMeters(lat1, lng1, lat2, lng2) {
   return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-// 픽업 표기: '오늘/어제/내일 HH:MM~HH:MM'
+// 픽업 마감 시간(분) → '주문 후 30분 이내 / 1시간 이내 / 1시간 30분 이내 / 2시간 이내'
+export function formatDeadlineDuration(minutes) {
+  if (!minutes) return '';
+  if (minutes < 60) return `주문 후 ${minutes}분 이내`;
+  if (minutes % 60 === 0) return `주문 후 ${minutes / 60}시간 이내`;
+  return `주문 후 ${Math.floor(minutes / 60)}시간 ${minutes % 60}분 이내`;
+}
+
+// orderedAt(ISO) + deadlineMinutes → '오후 3:30까지'
+export function formatDeadlineTime(orderedAt, deadlineMinutes) {
+  if (!orderedAt || !deadlineMinutes) return '';
+  const d = new Date(new Date(orderedAt).getTime() + deadlineMinutes * 60000);
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? '오후' : '오전';
+  const hDisplay = h > 12 ? h - 12 : h === 0 ? 12 : h;
+  return `${ampm} ${hDisplay}:${m}까지`;
+}
+
+// (하위 호환) 픽업 윈도우 표기 — 구버전 DB 데이터용
 export function formatPickupWindow(start, end) {
   if (!start) return '';
   const s = new Date(start);

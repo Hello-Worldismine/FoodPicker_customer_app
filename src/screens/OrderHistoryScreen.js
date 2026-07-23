@@ -77,10 +77,10 @@ export default function OrderHistoryScreen({ navigation, route }) {
               {/* 픽업 정보 박스 */}
               <View style={styles.metaBox}>
                 <View style={styles.metaRow}>
-                  <Text style={styles.metaLabel}>픽업 시간</Text>
+                  <Text style={styles.metaLabel}>픽업 마감</Text>
                   <View style={styles.metaRight}>
                     <Clock size={12} color={colors.warmOrange} />
-                    <Text style={[styles.metaValue, { color: colors.warmOrange }]}>{order.pickupTime}</Text>
+                    <Text style={[styles.metaValue, { color: colors.warmOrange }]}>{order.pickupDeadline}</Text>
                   </View>
                 </View>
                 <View style={[styles.metaRow, { marginBottom: 0 }]}>
@@ -172,7 +172,7 @@ export default function OrderHistoryScreen({ navigation, route }) {
                 : <QrCode size={100} color={colors.charcoalBlack} />}
               <Text style={styles.qrId}>{showQR?.id}</Text>
             </View>
-            <Text style={styles.qrTime}>픽업 시간: {showQR?.pickupTime}</Text>
+            <Text style={styles.qrTime}>픽업 마감: {showQR?.pickupDeadline}</Text>
             <TouchableOpacity style={styles.qrCloseBtn} onPress={() => setShowQR(null)}>
               <Text style={styles.qrCloseBtnText}>닫기</Text>
             </TouchableOpacity>

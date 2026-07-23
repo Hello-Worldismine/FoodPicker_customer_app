@@ -88,10 +88,6 @@ export default function LikedStoresScreen({ navigation }) {
                     <Text style={styles.dist}>{fmtDist(store.distance)}</Text>
                   </View>
 
-                  <View style={styles.metaRow}>
-                    <Clock size={11} color={colors.warmOrange} />
-                    <Text style={styles.pickup}>픽업 {store.pickupTime}</Text>
-                  </View>
                 </View>
 
                 {/* 하트 */}

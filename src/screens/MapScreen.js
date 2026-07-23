@@ -182,7 +182,6 @@ export default function MapScreen({ navigation }) {
                   {selectedStore.distance >= 1000
                     ? `${(selectedStore.distance / 1000).toFixed(1)}km`
                     : `${selectedStore.distance}m`}
-                  {selectedStore.pickupTime ? ` · 픽업 ${selectedStore.pickupTime}` : ''}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setSelectedStore(null)} style={{ padding: 4 }}>

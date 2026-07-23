@@ -39,7 +39,7 @@ export default function OrderCompleteScreen({ navigation, route }) {
             <Text style={styles.cardLabel}>예약 정보</Text>
             {[
               { label: '상품명', value: order.productName },
-              { label: '픽업 시간', value: order.pickupTime },
+              { label: '픽업 마감', value: order.pickupDeadline },
               { label: '픽업 매장', value: order.store },
               { label: '매장 주소', value: order.storeAddress },
               { label: '결제 금액', value: `${order.totalPrice.toLocaleString()}원`, bold: true },
@@ -53,7 +53,9 @@ export default function OrderCompleteScreen({ navigation, route }) {
 
           {/* 픽업 알림 */}
           <View style={styles.reminderBox}>
-            <Text style={styles.reminderText}>📍 픽업 30분 전에 알림을 보내드릴게요</Text>
+            <Text style={styles.reminderText}>
+              📍 픽업 마감 {(order.pickupDeadlineMinutes ?? 60) <= 30 ? '10분' : '30분'} 전에 알림을 보내드릴게요
+            </Text>
           </View>
 
           {/* 버튼 */}

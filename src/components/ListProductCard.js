@@ -3,9 +3,11 @@ import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Heart, Bell, Clock, Star, MapPin } from 'lucide-react-native';
 import { colors } from '../theme';
 
-function fmtTime(iso) {
-  const d = new Date(iso);
-  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+function fmtDeadline(minutes) {
+  if (!minutes) return '';
+  if (minutes < 60) return `${minutes}분 이내`;
+  if (minutes % 60 === 0) return `${minutes / 60}시간 이내`;
+  return `${Math.floor(minutes / 60)}시간 ${minutes % 60}분 이내`;
 }
 function stockColor(n) {
   if (n <= 4) return '#E53935';
@@ -92,7 +94,7 @@ export default function ListProductCard({
         {/* 픽업 시간 */}
         <View style={[styles.metaRow, { marginTop: 3 }]}>
           <Clock size={11} color={colors.warmOrange} />
-          <Text style={styles.pickupText}>픽업 {fmtTime(product.pickupStart)}~{fmtTime(product.pickupEnd)}</Text>
+          <Text style={styles.pickupText}>주문 후 {fmtDeadline(product.pickupDeadlineMinutes)}</Text>
         </View>
 
         {/* 뱃지 */}

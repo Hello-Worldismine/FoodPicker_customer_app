@@ -7,9 +7,11 @@ import { ArrowLeft, CreditCard, Smartphone, Check, Tag, X, MapPin } from 'lucide
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 
-function formatTime(iso) {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+function fmtDeadline(minutes) {
+  if (!minutes) return '';
+  if (minutes < 60) return `주문 후 ${minutes}분 이내`;
+  if (minutes % 60 === 0) return `주문 후 ${minutes / 60}시간 이내`;
+  return `주문 후 ${Math.floor(minutes / 60)}시간 ${minutes % 60}분 이내`;
 }
 
 function formatDate(iso) {
@@ -43,7 +45,7 @@ const PAYMENT_METHODS = [
 
 const CONFIRMS = [
   '소비기한 임박 상품임을 확인했습니다.',
-  '지정된 픽업 시간 내 방문해야 함을 확인했습니다.',
+  '주문 후 지정된 시간 이내에 방문해야 함을 확인했습니다.',
   '픽업 후 단순 변심 환불이 제한될 수 있음을 확인했습니다.',
 ];
 
@@ -141,7 +143,7 @@ export default function OrderScreen({ navigation, route }) {
           <Text style={styles.sectionLabel}>픽업 정보</Text>
           {[
             { label: '픽업 매장', value: product.store },
-            { label: '픽업 가능 시간', value: `${formatTime(product.pickupStart)} ~ ${formatTime(product.pickupEnd)}` },
+            { label: '픽업 마감', value: fmtDeadline(product.pickupDeadlineMinutes) },
             { label: '소비기한', value: formatDate(product.expiryDate) },
           ].map((item, idx) => (
             <View key={item.label} style={[styles.infoRow, idx < 2 && styles.infoRowBorder]}>

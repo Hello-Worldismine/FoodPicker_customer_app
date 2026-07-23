@@ -236,7 +236,7 @@ export default function SearchScreen({ navigation }) {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.storeRowName}>{s.name}</Text>
                     <Text style={styles.storeRowMeta}>
-                      {s.distance >= 1000 ? `${(s.distance/1000).toFixed(1)}km` : `${s.distance}m`} · 상품 {s.productCount}개 · 픽업 {s.pickupTime}
+                      {s.distance >= 1000 ? `${(s.distance/1000).toFixed(1)}km` : `${s.distance}m`} · 상품 {s.productCount}개
                     </Text>
                   </View>
                   <View style={[styles.storeStatusDot, {
