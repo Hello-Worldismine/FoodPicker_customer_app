@@ -105,6 +105,7 @@ function mapOrder(r) {
     status: (fmt.ORDER_STATUS[r.seller_status] || {}).key || 'pickupReady',
     sellerStatus: r.seller_status,
     orderedAt: r.ordered_at,
+    paymentKey: r.payment_key || null, // 토스 결제 건 — 취소 시 PG 환불 선행에 사용
   };
 }
 
@@ -204,6 +205,8 @@ export async function fetchMyOrders() {
   if (error) throw error;
   return (data || []).map(mapOrder);
 }
+// 토스 연동 후 미사용(직접 호출은 서버에서 차단됨 — create_order 는 service_role 전용).
+// 결제 경로는 confirmTossPayment(Edge Function toss-confirm)를 사용한다.
 export async function createOrder(productId, quantity = 1, couponIds = []) {
   const { data, error } = await supabase.rpc('create_order', {
     p_product_id: productId, p_quantity: quantity, p_coupon_ids: couponIds || [],
@@ -211,7 +214,50 @@ export async function createOrder(productId, quantity = 1, couponIds = []) {
   if (error) throw error;
   return mapOrder(data);
 }
+// 토스 결제 승인 + 주문 생성 — Edge Function(toss-confirm)이 토스 승인 API 호출 후
+// service_role 로 create_order 를 실행한다. amount=0(전액 쿠폰)이면 paymentKey 없이 무결제 주문.
+// functions.invoke 는 현재 세션 JWT 를 Authorization 헤더로 자동 첨부한다.
+export async function confirmTossPayment({ paymentKey, orderId, amount, productId, quantity, couponIds }) {
+  const { data, error } = await supabase.functions.invoke('toss-confirm', {
+    body: { paymentKey, orderId, amount, productId, quantity, couponIds: couponIds || [] },
+  });
+  if (error) {
+    // 4xx 응답(FunctionsHttpError)이면 함수가 내려준 { error } 메시지를 추출해 던진다.
+    let msg = error.message;
+    try {
+      if (error.context && typeof error.context.json === 'function') {
+        const body = await error.context.json();
+        if (body && body.error) msg = body.error;
+      }
+    } catch (e) {}
+    throw new Error(msg || '결제 승인에 실패했습니다.');
+  }
+  if (data && data.error) throw new Error(data.error);
+  return mapOrder(data.order);
+}
 export async function cancelOrder(orderCode) {
+  // 토스 결제 주문이면 DB 취소 전에 PG 결제를 실제 환불(toss-cancel — 본인 주문 검증은 서버).
+  // toss-cancel 은 이미 취소된 결제를 성공으로 간주(멱등)하므로,
+  // 'PG 취소 성공 → DB 취소 실패' 후 재시도해도 여기서 막히지 않는다.
+  const { data: row, error: findError } = await supabase
+    .from('orders').select('payment_key').eq('order_code', orderCode).maybeSingle();
+  if (findError) throw findError;
+  if (row && row.payment_key) {
+    const { data: cancelData, error: cancelError } = await supabase.functions.invoke('toss-cancel', {
+      body: { paymentKey: row.payment_key, cancelReason: '구매자 주문 취소' },
+    });
+    if (cancelError) {
+      let msg = cancelError.message;
+      try {
+        if (cancelError.context && typeof cancelError.context.json === 'function') {
+          const body = await cancelError.context.json();
+          if (body && body.error) msg = body.error;
+        }
+      } catch (e) {}
+      throw new Error(msg || '결제 취소에 실패했습니다.');
+    }
+    if (cancelData && cancelData.error) throw new Error(cancelData.error);
+  }
   // 본인 주문이 픽업 전(new/confirmed)일 때만 취소(서버 RPC, 재고 복구 포함).
   const { data, error } = await supabase.rpc('cancel_my_order', { p_order_code: orderCode });
   if (error) throw error;

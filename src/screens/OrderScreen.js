@@ -3,9 +3,12 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, CreditCard, Smartphone, Check, Tag, X, MapPin } from 'lucide-react-native';
+import { ArrowLeft, ShieldCheck, Check, Tag, X, MapPin } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
+import { confirmTossPayment } from '../lib/api';
+import TossPaymentModal from '../components/TossPaymentModal';
 
 function fmtDeadline(minutes) {
   if (!minutes) return '';
@@ -19,12 +22,45 @@ function formatDate(iso) {
   return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
-// TODO: 주문 ID는 서버에서 발급받아야 합니다. 이 함수는 백엔드 연동 후 제거하세요.
-function generateOrderId() {
-  const now = new Date();
-  const date = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
-  const seq = String(Math.floor(100 + Math.random() * 900));
-  return `ORD-${date}-${seq}`;
+// 토스페이먼츠 결제창(v2) 클라이언트 키. env 우선, 폴백은 토스 공식 문서의 공개 테스트 키(실결제 안 됨).
+const TOSS_CLIENT_KEY = process.env.EXPO_PUBLIC_TOSS_CLIENT_KEY || 'test_ck_D5GePWvyJnrK0W0k6q8gLzN97Eoq';
+
+// 토스 orderId 규칙: 영문 대소문자/숫자/-/_ 로 6~64자.
+function makeTossOrderId() {
+  return `FP_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+// 승인(toss-confirm)/주문 생성 에러 → 사용자 안내 문구.
+// 서버가 rpc 에러를 '주문 생성에 실패해 결제를 취소했습니다. (원문)' 형태로 래핑하므로
+// 정확일치(===)가 아니라 포함(includes) 매칭을 쓴다.
+const ORDER_ERROR_MAP = [
+  ['insufficient stock', '재고가 부족합니다.'],
+  ['product not on sale', '판매가 종료된 상품입니다.'],
+  ['store not accepting orders', '지금은 주문을 받지 않는 매장입니다.'],
+  ['store not approved', '주문할 수 없는 매장입니다.'],
+  ['coupon not stackable', '단독 사용 쿠폰은 다른 쿠폰과 함께 쓸 수 없습니다.'],
+  ['coupon not valid for this store', '이 매장에서 사용할 수 없는 쿠폰이 포함돼 있습니다.'],
+  ['order below coupon minimum', '주문 금액이 쿠폰 최소 조건에 미달합니다.'],
+  ['coupon already used', '이미 사용된 쿠폰이 포함돼 있습니다.'],
+  ['amount mismatch', '결제 금액 검증에 실패했습니다. 다시 시도해주세요.'],
+  ['payment required', '결제 정보가 없습니다. 다시 시도해주세요.'],
+];
+function orderErrorMessage(e) {
+  const m = (e && e.message) || '';
+  for (const [key, label] of ORDER_ERROR_MAP) {
+    if (m.includes(key)) {
+      // 보상 취소가 완료된 실패면 결제가 취소됐음을 함께 안내
+      return m.includes('결제를 취소했습니다') ? `${label}\n결제는 자동 취소되었습니다.` : label;
+    }
+  }
+  return m || '주문 처리 중 오류가 발생했습니다.';
+}
+
+// 결제 취소가 '완료'된 확정 실패인가 — 이 경우에만 재결제 유도가 안전하다.
+// 그 외(네트워크/상태 불명)는 같은 paymentKey 로 재확인해야 이중 결제가 생기지 않는다.
+function isFinalizedFailure(e) {
+  const m = (e && e.message) || '';
+  return m.includes('결제를 취소했습니다');
 }
 
 function calcCouponDiscount(coupon, subtotal) {
@@ -35,14 +71,6 @@ function calcCouponDiscount(coupon, subtotal) {
   return Math.min(d, subtotal);
 }
 
-// TODO: GET /api/payment-methods 로 사용자 등록 결제 수단을 불러오세요.
-const PAYMENT_METHODS = [
-  { id: 'card',     label: '신용/체크카드', Icon: CreditCard },
-  { id: 'kakaopay', label: '카카오페이',   Icon: Smartphone },
-  { id: 'naverpay', label: '네이버페이',   Icon: Smartphone },
-  { id: 'tosspay',  label: '토스페이',     Icon: Smartphone },
-];
-
 const CONFIRMS = [
   '소비기한 임박 상품임을 확인했습니다.',
   '주문 후 지정된 시간 이내에 방문해야 함을 확인했습니다.',
@@ -51,14 +79,19 @@ const CONFIRMS = [
 
 export default function OrderScreen({ navigation, route }) {
   const { productId, qty } = route.params;
-  const { productList, coupons, placeOrder } = useApp();
+  const { productList, coupons, reload } = useApp();
+  const { user } = useAuth();
   const product = productList.find(p => p.id === productId);
 
-  const [payMethod, setPayMethod] = useState('card');
   const [checked, setChecked] = useState([false, false, false]);
   const [selectedCoupons, setSelectedCoupons] = useState([]);
   const [showCouponSheet, setShowCouponSheet] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [tossVisible, setTossVisible] = useState(false);
+  // 결제 세션 스냅샷 — 결제창이 열린 동안 금액/주문번호가 재계산으로 흔들리지 않게 고정.
+  const [tossSession, setTossSession] = useState(null); // { orderId, amount }
+  // 이중 제출 가드(ref) — state 는 비동기라 연타 시 두 번 진입할 수 있다.
+  const submittingRef = React.useRef(false);
 
   if (!product) return null;
 
@@ -87,27 +120,70 @@ export default function OrderScreen({ navigation, route }) {
     });
   }
 
-  async function handlePay() {
-    if (!allChecked || submitting) return;
+  // 승인+주문 생성(Edge Function toss-confirm) → 전역 상태 재로딩 → 완료 화면.
+  // 서버가 재고/쿠폰/금액을 재검증하고 create_order(service_role)를 실행한다.
+  async function finalizeOrder({ paymentKey, orderId, amount }) {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
+    let order;
     try {
-      // 서버 RPC(create_order): 재고 검증 → 결제확정(paid) → 발번 → 재고차감 → 판매자/구매자 알림.
-      // 쿠폰은 code(selectedCoupon.id)로 전달하고 서버가 실제 할인/금액을 계산한다.
-      const order = await placeOrder(productId, qty, selectedCoupons.map(c => c.couponId));
-      const couponName = selectedCoupons.length === 0 ? null
-        : selectedCoupons.length === 1 ? selectedCoupons[0].name
-        : `${selectedCoupons[0].name} 외 ${selectedCoupons.length - 1}건`;
-      navigation.replace('OrderComplete', { order: { ...order, couponName } });
+      order = await confirmTossPayment({
+        paymentKey, orderId, amount,
+        productId, quantity: qty,
+        couponIds: selectedCoupons.map(c => c.couponId),
+      });
     } catch (e) {
+      submittingRef.current = false;
       setSubmitting(false);
-      const msg = e.message === 'insufficient stock' ? '재고가 부족합니다.'
-        : e.message === 'product not on sale' ? '판매가 종료된 상품입니다.'
-        : e.message === 'coupon not stackable' ? '단독 사용 쿠폰은 다른 쿠폰과 함께 쓸 수 없습니다.'
-        : e.message === 'coupon not valid for this store' ? '이 매장에서 사용할 수 없는 쿠폰이 포함돼 있습니다.'
-        : e.message === 'order below coupon minimum' ? '주문 금액이 쿠폰 최소 조건에 미달합니다.'
-        : (e.message || '주문 처리 중 오류가 발생했습니다.');
-      Alert.alert('주문 실패', msg);
+      const msg = orderErrorMessage(e);
+      // 유료 결제인데 취소가 확정되지 않은 실패(네트워크/상태 불명):
+      // 같은 paymentKey 로 재확인해야 한다 — 새 결제창을 열면 이중 결제가 된다.
+      if (paymentKey && !isFinalizedFailure(e)) {
+        Alert.alert('주문 확인 필요', `${msg}\n\n결제 상태를 다시 확인할 수 있습니다.`, [
+          { text: '나중에', style: 'cancel' },
+          { text: '다시 확인', onPress: () => finalizeOrder({ paymentKey, orderId, amount }) },
+        ]);
+      } else {
+        Alert.alert('주문 실패', msg);
+      }
+      return;
     }
+    // 주문 생성 이후의 재로딩 실패는 주문 실패가 아니다 — 무시하고 완료 화면으로.
+    try { await reload(); } catch (e) {}
+    const couponName = selectedCoupons.length === 0 ? null
+      : selectedCoupons.length === 1 ? selectedCoupons[0].name
+      : `${selectedCoupons[0].name} 외 ${selectedCoupons.length - 1}건`;
+    navigation.replace('OrderComplete', { order: { ...order, couponName } });
+  }
+
+  function handlePay() {
+    if (!allChecked || submitting || submittingRef.current) return;
+    if (finalPrice === 0) {
+      // 전액 쿠폰: 결제창 없이 무결제 주문 (서버가 amount=0 을 재검증)
+      finalizeOrder({ amount: 0 });
+      return;
+    }
+    // 결제 세션 고정: 결제창이 열린 동안 금액이 재계산돼도 결제창/검증 기준은 불변.
+    setTossSession({ orderId: makeTossOrderId(), amount: finalPrice });
+    setTossVisible(true);
+  }
+
+  function handleTossSuccess({ paymentKey, orderId, amount }) {
+    setTossVisible(false);
+    const expected = tossSession?.amount;
+    // 필수 검증(토스 문서): 리다이렉트 쿼리의 amount == 결제창을 연 시점의 요청 금액.
+    if (!expected || Number(amount) !== expected) {
+      Alert.alert('결제 실패', '결제 금액이 일치하지 않아 승인하지 않았습니다. 다시 시도해주세요.');
+      return;
+    }
+    finalizeOrder({ paymentKey, orderId, amount: expected });
+  }
+
+  function handleTossFail(message, code) {
+    setTossVisible(false);
+    if (code === 'PAY_PROCESS_CANCELED') return; // 사용자가 결제창에서 직접 취소 — 조용히 복귀
+    Alert.alert('결제 실패', message || '결제 처리 중 오류가 발생했습니다.');
   }
 
   return (
@@ -197,20 +273,15 @@ export default function OrderScreen({ navigation, route }) {
           ))}
         </View>
 
-        {/* 결제 수단 */}
+        {/* 결제 수단 — 토스페이먼츠 결제창에서 선택 */}
         <View style={styles.card}>
           <Text style={styles.sectionLabel}>결제 수단</Text>
-          <View style={styles.payGrid}>
-            {PAYMENT_METHODS.map(({ id, label, Icon }) => {
-              const active = payMethod === id;
-              return (
-                <TouchableOpacity key={id} onPress={() => setPayMethod(id)}
-                  style={[styles.payBtn, active && styles.payBtnActive]}>
-                  <Icon size={16} color={active ? colors.primaryGreen : colors.mediumGray} />
-                  <Text style={[styles.payLabel, active && styles.payLabelActive]}>{label}</Text>
-                </TouchableOpacity>
-              );
-            })}
+          <View style={styles.tossPayCard}>
+            <ShieldCheck size={20} color={colors.primaryGreen} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.tossPayTitle}>토스페이먼츠 안전결제</Text>
+              <Text style={styles.tossPayDesc}>결제하기를 누르면 열리는 결제창에서 카드/간편결제를 선택할 수 있어요.</Text>
+            </View>
           </View>
         </View>
 
@@ -324,6 +395,19 @@ export default function OrderScreen({ navigation, route }) {
           </View>
         </View>
       </Modal>
+
+      {/* 토스페이먼츠 결제창 */}
+      <TossPaymentModal
+        visible={tossVisible && !!tossSession}
+        onClose={() => setTossVisible(false)}
+        clientKey={TOSS_CLIENT_KEY}
+        customerKey={user?.id}
+        amount={tossSession?.amount ?? 0}
+        orderId={tossSession?.orderId ?? ''}
+        orderName={(qty > 1 ? `${product.name} ${qty}개` : product.name).slice(0, 100)}
+        onSuccess={handleTossSuccess}
+        onFail={handleTossFail}
+      />
     </SafeAreaView>
   );
 }
@@ -379,16 +463,12 @@ const styles = StyleSheet.create({
   selectedCouponName: { fontSize: 13, fontWeight: '700', color: colors.primaryGreen },
   selectedCouponInfo: { fontSize: 12, color: colors.primaryGreen, marginTop: 2 },
   selectedCouponDiscount: { fontSize: 15, fontWeight: '800', color: colors.primaryGreen },
-  payGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  payBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    padding: 12, backgroundColor: colors.softGray,
-    borderRadius: 12, width: '48%',
-    borderWidth: 1.5, borderColor: 'transparent',
+  tossPayCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: colors.freshMint, borderRadius: 12, padding: 14,
   },
-  payBtnActive: { backgroundColor: colors.freshMint, borderColor: colors.primaryGreen },
-  payLabel: { fontSize: 13, color: colors.charcoalBlack },
-  payLabelActive: { color: colors.primaryGreen, fontWeight: '700' },
+  tossPayTitle: { fontSize: 14, fontWeight: '700', color: colors.charcoalBlack },
+  tossPayDesc: { fontSize: 12, color: colors.mediumGray, marginTop: 3, lineHeight: 17 },
   priceRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
   priceLbl: { fontSize: 13, color: colors.mediumGray },
   priceVal: { fontSize: 13, fontWeight: '600', color: colors.charcoalBlack },
