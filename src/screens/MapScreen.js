@@ -10,17 +10,9 @@ import { getCurrentCoords } from '../lib/location';
 import { DEFAULT_LOCATION } from '../lib/api';
 import NaverMap from '../components/NaverMap';
 
-const CATEGORIES = ['전체', '베이커리·디저트', '도시락·간편식', '샐러드·건강식', '반찬·밀키트', '채소·과일', '정육·수산', '음료·기타'];
+import { ALL_CATEGORY, FALLBACK_CATEGORIES, matchesCategory } from '../lib/categories';
 
-const CATEGORY_MAP = {
-  '베이커리·디저트': ['빵', '디저트', '베이커리'],
-  '도시락·간편식':   ['도시락', '간편식'],
-  '샐러드·건강식':   ['샐러드', '건강식'],
-  '반찬·밀키트':    ['반찬', '밀키트'],
-  '채소·과일':      ['채소', '과일'],
-  '정육·수산':      ['정육', '수산'],
-  '음료·기타':      ['음료', '기타'],
-};
+const CATEGORIES = [ALL_CATEGORY, ...FALLBACK_CATEGORIES.map(c => c.name)];
 
 const FILTERS = [
   { key: 'discount50', label: '50% 이상 할인', Icon: Percent },
@@ -53,12 +45,13 @@ export default function MapScreen({ navigation }) {
     setSelectedStore(null);
   }
 
-  const mappedCats = CATEGORY_MAP[selCat];
-  let filteredStores = selCat === '전체'
+  // 카테고리 필터: 해당 카테고리 상품을 가진 매장, 또는 매장 업종 자체가 대응되는 매장.
+  // (상품이 아직 없는 매장도 지도에서 사라지지 않게 매장 category 로도 대조한다)
+  let filteredStores = selCat === ALL_CATEGORY
     ? stores
     : stores.filter(s => {
-        const sp = productList.filter(p => p.storeId === s.id);
-        return sp.some(p => mappedCats ? mappedCats.includes(p.category) : p.category === selCat);
+        if (matchesCategory(s.category, selCat)) return true;
+        return productList.some(p => p.storeId === s.id && matchesCategory(p.category, selCat));
       });
 
   if (activeFilters.length > 0) {

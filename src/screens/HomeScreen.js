@@ -14,18 +14,11 @@ import { useApp } from '../context/AppContext';
 // 매장/상품은 Supabase(useApp)에서 로드.
 // 배너: 관리자 웹이 등록한 이미지 배너(banners 테이블)가 있으면 우선 노출, 없으면 정적 카드 폴백.
 import { mockBannerAds } from '../data/mockData';
-import { fetchActiveBanners } from '../lib/api';
+import { fetchActiveBanners, fetchCategories } from '../lib/api';
+import { normalizeCategoryName, withAllCategory } from '../lib/categories';
 
-const CATEGORIES = [
-  { key: '전체',         emoji: '🛒', bg: '#E8F5E9' },
-  { key: '베이커리·디저트', emoji: '🥐', bg: '#FFF8E7' },
-  { key: '도시락·간편식', emoji: '🍱', bg: '#FFEBEE' },
-  { key: '샐러드·건강식', emoji: '🥗', bg: '#F1F8E9' },
-  { key: '반찬·밀키트',  emoji: '🥘', bg: '#FFF3E0' },
-  { key: '채소·과일',    emoji: '🥦', bg: '#E8F5E9' },
-  { key: '정육·수산',    emoji: '🥩', bg: '#FCE4EC' },
-  { key: '음료·기타',    emoji: '🧋', bg: '#E3F2FD' },
-];
+// 카테고리 아이콘 배경색 — 관리자 웹에는 색 설정이 없으므로 순서대로 순환 적용한다.
+const CAT_BG = ['#E8F5E9', '#FFF8E7', '#FFEBEE', '#F1F8E9', '#FFF3E0', '#E8F5E9', '#FCE4EC', '#E3F2FD'];
 
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -187,6 +180,8 @@ export default function HomeScreen({ navigation }) {
   const hasUnread = notifications.some(n => !n.read);
   const [bannerIndex, setBannerIndex] = useState(0);
   const [dbBanners, setDbBanners] = useState([]);
+  // 관리자 웹 '카테고리 관리'(categories 테이블)를 그대로 노출. 실패 시 정적 폴백.
+  const [categories, setCategories] = useState(() => withAllCategory(null));
   const flatRef = useRef(null);
 
   useEffect(() => {
@@ -194,6 +189,9 @@ export default function HomeScreen({ navigation }) {
     fetchActiveBanners()
       .then(rows => { if (!cancelled) setDbBanners(rows.filter(b => b.imageUrl)); })
       .catch(() => {}); // 테이블 미생성/네트워크 실패 시 정적 배너 폴백
+    fetchCategories()
+      .then(rows => { if (!cancelled && rows.length) setCategories(withAllCategory(rows)); })
+      .catch(() => {}); // 조회 실패 시 폴백 카테고리 유지
     return () => { cancelled = true; };
   }, []);
 
@@ -212,16 +210,19 @@ export default function HomeScreen({ navigation }) {
     return () => clearInterval(timer);
   }, [banners.length]);
 
-  // 배너 link('/category/빵' 형태)에서 카테고리 이동 대상 추출
+  // 배너 link('/category/빵', '/category/drinks' 형태)에서 카테고리 이동 대상 추출.
+  // 관리자가 영문 슬러그를 넣어도 정본 카테고리명으로 정규화한다(미대응 시 '전체').
   function bannerCategory(link) {
     const m = /\/category\/(.+)$/.exec(link || '');
-    return m ? decodeURIComponent(m[1]) : '전체';
+    return normalizeCategoryName(m ? decodeURIComponent(m[1]) : '');
   }
 
   const nearbyStores = [...stores].sort((a, b) => a.distance - b.distance);
 
+  // 재고가 남아 있고 소비기한이 지나지 않은 상품만 노출.
+  // (기존 `p.stock >= 0` 은 항상 참이라 품절 상품까지 통과했다)
   const availableProducts = productList.filter(
-    p => p.stock >= 0 && new Date(p.expiryDate) > new Date()
+    p => p.stock > 0 && new Date(p.expiryDate) > new Date()
   );
 
   const closingProducts = availableProducts.filter(
@@ -300,17 +301,14 @@ export default function HomeScreen({ navigation }) {
         {/* 카테고리 그리드 */}
         <View style={styles.catSection}>
           <View style={styles.catGrid}>
-            {CATEGORIES.map(c => (
-              <TouchableOpacity key={c.key} style={styles.catItem} onPress={() => goCategory(c.key)} activeOpacity={0.78}>
-                {c.badge && (
-                  <View style={styles.catBadgePill}>
-                    <Text style={styles.catBadgePillText}>{c.badge}</Text>
-                  </View>
-                )}
-                <View style={[styles.catIconBox, { backgroundColor: c.bg }]}>
-                  <Text style={styles.catEmoji}>{c.emoji}</Text>
+            {categories.map((c, i) => (
+              <TouchableOpacity key={c.name} style={styles.catItem} onPress={() => goCategory(c.name)} activeOpacity={0.78}>
+                <View style={[styles.catIconBox, { backgroundColor: CAT_BG[i % CAT_BG.length] }]}>
+                  {c.imageUrl
+                    ? <Image source={{ uri: c.imageUrl }} style={styles.catImage} resizeMode="cover" />
+                    : <Text style={styles.catEmoji}>{c.icon || '🍽'}</Text>}
                 </View>
-                <Text style={styles.catLabel}>{c.key}</Text>
+                <Text style={styles.catLabel} numberOfLines={1}>{c.name}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -492,6 +490,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.10, shadowRadius: 8, elevation: 4,
   },
   catEmoji: { fontSize: 34 },
+  // 관리자 웹에서 업로드한 카테고리 아이콘 이미지(categories.image_url)
+  catImage: { width: '100%', height: '100%', borderRadius: 18 },
   catLabel: { fontSize: 11.5, fontWeight: '600', color: colors.charcoalBlack, textAlign: 'center' },
 
   /* 섹션 공통 */

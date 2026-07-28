@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
+import { signInWithProvider, ensureUserName, PROVIDER_LABEL, OAUTH_CANCELLED } from '../lib/oauth';
 import { colors } from '../theme';
 
 export default function LoginScreen({ navigation }) {
@@ -12,6 +13,9 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  // 진행 중인 소셜 로그인 제공자('kakao'|'naver'|'google'|null) — 버튼별 스피너 + 중복탭 차단
+  const [socialBusy, setSocialBusy] = useState(null);
+  const busy = loading || socialBusy != null;
 
   async function handleLogin() {
     if (!email.trim() || !password) {
@@ -32,6 +36,23 @@ export default function LoginScreen({ navigation }) {
     // 성공 시 AuthProvider.onAuthStateChange 가 게이트를 앱으로 전환
   }
 
+  // 간편 로그인(카카오/네이버/구글). 성공 시 표시명(raw_user_meta_data.name)을 보정한다.
+  async function handleSocial(provider) {
+    if (busy) return;
+    setSocialBusy(provider);
+    try {
+      await signInWithProvider(provider);
+      await ensureUserName();
+      // 세션이 생기면 AuthProvider 게이트가 자동으로 앱 화면으로 전환한다.
+    } catch (e) {
+      if (e?.code !== OAUTH_CANCELLED) {
+        Alert.alert(`${PROVIDER_LABEL[provider] ?? ''} 로그인 실패`, e?.message ?? '잠시 후 다시 시도해주세요.');
+      }
+    } finally {
+      setSocialBusy(null);
+    }
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.white }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -49,8 +70,8 @@ export default function LoginScreen({ navigation }) {
           <TextInput style={styles.input} placeholder="비밀번호" placeholderTextColor="#C4C9D0"
             secureTextEntry value={password} onChangeText={setPassword} onSubmitEditing={handleLogin} />
 
-          <TouchableOpacity activeOpacity={0.85} onPress={handleLogin} disabled={loading}
-            style={{ backgroundColor: colors.primaryGreen, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8, opacity: loading ? 0.7 : 1 }}>
+          <TouchableOpacity activeOpacity={0.85} onPress={handleLogin} disabled={busy}
+            style={{ backgroundColor: colors.primaryGreen, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8, opacity: busy ? 0.7 : 1 }}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>로그인</Text>}
           </TouchableOpacity>
 
@@ -66,27 +87,36 @@ export default function LoginScreen({ navigation }) {
           </View>
 
           {/* 카카오 로그인 */}
-          <TouchableOpacity style={styles.socialBtn} activeOpacity={0.85} onPress={() => {}}>
+          <TouchableOpacity style={[styles.socialBtn, busy && styles.socialBtnDisabled]} activeOpacity={0.85}
+            disabled={busy} onPress={() => handleSocial('kakao')}>
             <View style={[styles.socialIconWrap, { backgroundColor: '#3C1E1E' }]}>
               <Text style={[styles.socialIconText, { color: '#FEE500' }]}>K</Text>
             </View>
-            <Text style={styles.socialLabel}>카카오로 계속하기</Text>
+            {socialBusy === 'kakao'
+              ? <ActivityIndicator style={{ flex: 1 }} color={colors.charcoalBlack} />
+              : <Text style={styles.socialLabel}>카카오로 계속하기</Text>}
           </TouchableOpacity>
 
           {/* 네이버 로그인 */}
-          <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#03C75A' }]} activeOpacity={0.85} onPress={() => {}}>
+          <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#03C75A' }, busy && styles.socialBtnDisabled]} activeOpacity={0.85}
+            disabled={busy} onPress={() => handleSocial('naver')}>
             <View style={[styles.socialIconWrap, { backgroundColor: '#02A04A' }]}>
               <Text style={[styles.socialIconText, { color: '#fff' }]}>N</Text>
             </View>
-            <Text style={[styles.socialLabel, { color: '#fff' }]}>네이버로 계속하기</Text>
+            {socialBusy === 'naver'
+              ? <ActivityIndicator style={{ flex: 1 }} color="#fff" />
+              : <Text style={[styles.socialLabel, { color: '#fff' }]}>네이버로 계속하기</Text>}
           </TouchableOpacity>
 
           {/* 구글 로그인 */}
-          <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#E0E0E0' }]} activeOpacity={0.85} onPress={() => {}}>
+          <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#E0E0E0' }, busy && styles.socialBtnDisabled]} activeOpacity={0.85}
+            disabled={busy} onPress={() => handleSocial('google')}>
             <View style={[styles.socialIconWrap, { backgroundColor: '#F5F5F5' }]}>
               <Text style={[styles.socialIconText, { color: '#4285F4' }]}>G</Text>
             </View>
-            <Text style={styles.socialLabel}>Google로 계속하기</Text>
+            {socialBusy === 'google'
+              ? <ActivityIndicator style={{ flex: 1 }} color={colors.mediumGray} />
+              : <Text style={styles.socialLabel}>Google로 계속하기</Text>}
           </TouchableOpacity>
 
         </ScrollView>
@@ -109,6 +139,7 @@ const styles = StyleSheet.create({
     borderRadius: 14, paddingVertical: 13, paddingHorizontal: 16,
     marginBottom: 10, gap: 10,
   },
+  socialBtnDisabled: { opacity: 0.6 },
   socialIconWrap: {
     width: 28, height: 28, borderRadius: 8,
     alignItems: 'center', justifyContent: 'center',

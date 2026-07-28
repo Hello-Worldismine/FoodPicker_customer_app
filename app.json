@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "scheme": "foodpicker",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -65,7 +66,8 @@
         {
           "color": "#22A06B"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {

@@ -7,33 +7,15 @@ import { ArrowLeft, ChevronDown } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 import ListProductCard from '../components/ListProductCard';
+import {
+  ALL_CATEGORY, CATEGORY_EMOJI, matchesCategory, normalizeCategoryName,
+} from '../lib/categories';
 
 const SORT_OPTIONS = ['가까운 순', '마감 임박 순', '할인율 높은 순', '낮은 가격 순'];
 
-const CATEGORY_EMOJI = {
-  '전체': '🛒',
-  '베이커리·디저트': '🥐',
-  '도시락·간편식': '🍱',
-  '샐러드·건강식': '🥗',
-  '반찬·밀키트': '🥘',
-  '채소·과일': '🥦',
-  '정육·수산': '🥩',
-  '음료·기타': '🧋',
-};
-
-// 새 카테고리명 → 실제 상품 category 필드값 매핑
-const CATEGORY_MAP = {
-  '베이커리·디저트': ['빵', '디저트', '베이커리'],
-  '도시락·간편식':   ['도시락', '간편식'],
-  '샐러드·건강식':   ['샐러드', '건강식'],
-  '반찬·밀키트':    ['반찬', '밀키트'],
-  '채소·과일':      ['채소', '과일'],
-  '정육·수산':      ['정육', '수산'],
-  '음료·기타':      ['음료', '기타'],
-};
-
 export default function CategoryProductsScreen({ route, navigation }) {
-  const { category } = route.params;
+  // 배너 link('/category/drinks' 등)에서 넘어오는 값도 정본 카테고리명으로 정규화한다.
+  const category = normalizeCategoryName(route.params?.category);
   const { productList, handleLike } = useApp();
   const [sortBy, setSortBy] = useState('가까운 순');
   const [showSort, setShowSort] = useState(false);
@@ -42,12 +24,9 @@ export default function CategoryProductsScreen({ route, navigation }) {
     p => p.status === 'selling' && p.stock > 0 && new Date(p.expiryDate) > new Date()
   );
 
-  const mappedCats = CATEGORY_MAP[category];
-  let filtered = category === '전체'
+  let filtered = category === ALL_CATEGORY
     ? selling
-    : mappedCats
-      ? selling.filter(p => mappedCats.includes(p.category))
-      : selling.filter(p => p.category === category);
+    : selling.filter(p => matchesCategory(p.category, category));
 
   let sorted = [...filtered];
   if (sortBy === '가까운 순')       sorted.sort((a, b) => a.distance - b.distance);
