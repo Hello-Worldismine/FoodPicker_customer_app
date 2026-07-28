@@ -22,7 +22,12 @@ export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '', {
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
+    // 네이티브에는 URL 바가 없으므로 SDK 의 자동 URL 감지는 끄고,
+    // 딥링크(foodpicker://auth-callback)는 AuthContext / lib/oauth.js 에서 직접 처리한다.
     detectSessionInUrl: false,
+    // 소셜 로그인(OAuth) 은 PKCE 로 진행한다. implicit(기본값)은 access_token 이
+    // URL 프래그먼트로 노출되고 refresh_token 회수도 불안정해 네이티브에 부적합하다.
+    flowType: 'pkce',
   },
 });
 

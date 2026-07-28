@@ -21,6 +21,10 @@ async function currentUid() {
 
 // ───────── 매퍼 ─────────
 function mapProductRow(r, storeRow, favProducts) {
+  // 픽업 좌표/주소는 등록 시점 매장 스냅샷이라 매장이 나중에 좌표를 채우면 과거 상품은 null 로 남는다.
+  // → 매장 값으로 폴백해 상품상세 '픽업 장소' 지도와 거리 계산이 즉시 정상화되게 한다.
+  const lat = r.lat ?? storeRow?.lat ?? null;
+  const lng = r.lng ?? storeRow?.lng ?? null;
   const p = {
     id: r.id,
     name: r.name,
@@ -44,12 +48,12 @@ function mapProductRow(r, storeRow, favProducts) {
     origin: r.origin,
     allergyInfo: fmt.allergensToString(r.allergens),
     storageMethod: r.storage_detail,
-    pickupAddress: r.pickup_address,
+    pickupAddress: r.pickup_address || storeRow?.address || null,
     cancelPolicy: r.cancel_policy,
     storeNotice: r.store_notice,
-    lat: r.lat,
-    lng: r.lng,
-    distance: fmt.distanceMeters(userLoc.lat, userLoc.lng, r.lat, r.lng) ?? 0,
+    lat,
+    lng,
+    distance: fmt.distanceMeters(userLoc.lat, userLoc.lng, lat, lng) ?? 0,
     liked: favProducts.has(r.id),
   };
   p.badges = fmt.computeBadges(p);
@@ -106,6 +110,8 @@ function mapOrder(r) {
     sellerStatus: r.seller_status,
     orderedAt: r.ordered_at,
     paymentKey: r.payment_key || null, // 토스 결제 건 — 취소 시 PG 환불 선행에 사용
+    // 실제 승인된 결제수단(토스 승인 응답의 method — '카드'/'간편결제'/…). 무결제 주문은 null.
+    paymentMethod: r.payment_method || null,
   };
 }
 
@@ -262,6 +268,72 @@ export async function cancelOrder(orderCode) {
   const { data, error } = await supabase.rpc('cancel_my_order', { p_order_code: orderCode });
   if (error) throw error;
   return mapOrder(data);
+}
+
+// ───────── 결제수단 ─────────
+// 카드번호/유효기간/CVC 는 앱에서 입력받지도, DB 에 저장하지도 않는다(PCI 범위 밖).
+// 앱이 다루는 것은 ① 기본 결제수단 선택값(user_payment_prefs) ②토스 빌링키로 등록된
+// 카드의 표시 정보(my_payment_methods 뷰 — billing_key 는 뷰에서 제외돼 조회 불가) 뿐이다.
+function mapPaymentMethod(r) {
+  return {
+    id: r.id,
+    provider: r.provider,                    // 'toss'
+    methodType: r.method_type,               // 'card'
+    cardCompany: r.card_company,
+    cardNumberMasked: r.card_number_masked,
+    cardType: r.card_type,                   // '신용' | '체크'
+    alias: r.alias,
+    isDefault: !!r.is_default,
+    createdAt: r.created_at,
+  };
+}
+
+// 결제수단 RPC 는 대문자 상수로 예외를 던진다 → 사용자 문구로 변환.
+function paymentMethodError(e) {
+  const m = (e && e.message) || '';
+  if (m.includes('NOT_AUTHENTICATED')) return new Error('로그인이 필요합니다.');
+  if (m.includes('PAYMENT_METHOD_NOT_FOUND')) return new Error('결제수단을 찾을 수 없습니다.');
+  return new Error(m || '결제수단 처리 중 오류가 발생했습니다.');
+}
+
+// 기본 결제수단 선택값. 행이 없으면 앱 기본값(카드)을 돌려준다.
+export async function fetchMyPaymentPref() {
+  const { data, error } = await supabase.from('user_payment_prefs')
+    .select('default_method, easy_pay_provider').maybeSingle();
+  if (error) throw error;
+  return {
+    defaultMethod: (data && data.default_method) || 'CARD',
+    easyPayProvider: (data && data.easy_pay_provider) || null,
+  };
+}
+// buyer_id 가 PK 이므로 onConflict: 'buyer_id' 로 1행 upsert.
+export async function upsertMyPaymentPref({ defaultMethod, easyPayProvider }) {
+  const uid = await currentUid();
+  if (!uid) throw new Error('로그인이 필요합니다.');
+  const { data, error } = await supabase.from('user_payment_prefs')
+    .upsert(
+      { buyer_id: uid, default_method: defaultMethod, easy_pay_provider: easyPayProvider || null },
+      { onConflict: 'buyer_id' },
+    )
+    .select('default_method, easy_pay_provider').single();
+  if (error) throw error;
+  return { defaultMethod: data.default_method, easyPayProvider: data.easy_pay_provider || null };
+}
+
+// 등록된 카드(빌링키) 목록 — 자동결제 사용 승인 전에는 항상 빈 배열.
+export async function fetchMyPaymentMethods() {
+  const { data, error } = await supabase.from('my_payment_methods')
+    .select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(mapPaymentMethod);
+}
+export async function setDefaultPaymentMethod(id) {
+  const { error } = await supabase.rpc('set_default_payment_method', { p_id: id });
+  if (error) throw paymentMethodError(error);
+}
+export async function deleteMyPaymentMethod(id) {
+  const { error } = await supabase.rpc('delete_my_payment_method', { p_id: id });
+  if (error) throw paymentMethodError(error);
 }
 
 // ───────── 리뷰 ─────────
@@ -462,6 +534,24 @@ export async function fetchFaqs() {
       items: (data || []).filter(r => r.category === key).map(r => ({ q: r.question, a: r.answer })),
     }))
     .filter(g => g.items.length > 0);
+}
+
+// ───────── 카테고리 (관리자 웹 '카테고리 관리' — categories 테이블) ─────────
+// categories_public_select 정책이 anon 에게 is_active=true 행 select 를 허용한다.
+// 관리자가 이름·순서·아이콘(이모지 또는 업로드 이미지)을 바꾸면 홈 카테고리에 그대로 반영된다.
+export async function fetchCategories() {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('id, name, icon, image_url, display_order')
+    .eq('is_active', true)
+    .order('display_order', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(r => ({
+    id: r.id,
+    name: r.name,
+    icon: r.icon || null,
+    imageUrl: r.image_url || null,
+  }));
 }
 
 // ───────── 상품 미디어 (상태 무관 — public_product_media 뷰, 20260722 마이그레이션) ─────────

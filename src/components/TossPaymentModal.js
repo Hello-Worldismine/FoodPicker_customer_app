@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { X } from 'lucide-react-native';
 import { colors } from '../theme';
+import { EASY_PAY_LABEL } from '../lib/format';
 
 // 토스페이먼츠 결제창(v2 표준 SDK) WebView 모달.
 // 결제 결과는 successUrl/failUrl 리다이렉트를 onShouldStartLoadWithRequest 로 가로채 수신한다.
@@ -47,7 +48,30 @@ function jsStr(value) {
   return JSON.stringify(value).replace(/</g, '\\u003c');
 }
 
-function buildHtml({ clientKey, customerKey, amount, orderId, orderName }) {
+// 토스 v2 결제창 method 화이트리스트.
+// 'CARD' 는 "카드/간편결제 통합결제창"이다(공식 문서: method 를 CARD 로 설정하면
+// 카드와 간편결제를 한 결제창에서 선택). 이 앱은 카드+간편결제만 취급하므로 CARD 만 허용하고,
+// 계좌이체/가상계좌(TRANSFER/VIRTUAL_ACCOUNT)는 입금 지연·웹훅 처리가 없어 넣지 않는다.
+// 모르는 값이 들어오면 조용히 CARD 로 되돌린다 — 결제창이 아예 안 열리는 것보다 안전.
+const ALLOWED_METHODS = ['CARD'];
+
+// 특정 간편결제사를 바로 열기: card.flowMode='DIRECT' + card.easyPay=<간편결제사 코드>.
+// (flowMode DEFAULT = 통합결제창 / DIRECT = 지정한 간편결제 앱의 전용 창)
+function normalizeEasyPay(code) {
+  return code && Object.prototype.hasOwnProperty.call(EASY_PAY_LABEL, code) ? code : null;
+}
+
+function buildHtml({ clientKey, customerKey, amount, orderId, orderName, method, easyPay }) {
+  const payMethod = ALLOWED_METHODS.includes(method) ? method : 'CARD';
+  const provider = normalizeEasyPay(easyPay);
+  // 간편결제사를 지정하지 않으면 DEFAULT(통합결제창) — 사용자가 창에서 카드/간편결제를 고른다.
+  const cardOption = {
+    useEscrow: false,
+    flowMode: provider ? 'DIRECT' : 'DEFAULT',
+    useCardPoint: false,
+    useAppCardOnly: false,
+    ...(provider ? { easyPay: provider } : {}),
+  };
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -73,13 +97,13 @@ function startPayment() {
     var tossPayments = TossPayments(${jsStr(clientKey)});
     var payment = tossPayments.payment({ customerKey: ${jsStr(customerKey)} });
     payment.requestPayment({
-      method: 'CARD',
+      method: ${jsStr(payMethod)},
       amount: { currency: 'KRW', value: ${jsStr(Number(amount))} },
       orderId: ${jsStr(orderId)},
       orderName: ${jsStr(orderName)},
       successUrl: ${jsStr(SUCCESS_URL)},
       failUrl: ${jsStr(FAIL_URL)},
-      card: { useEscrow: false, flowMode: 'DEFAULT', useCardPoint: false, useAppCardOnly: false },
+      card: ${jsStr(cardOption)},
     }).catch(function (e) {
       post({ error: (e && e.code) || 'PAYMENT_ERROR', message: e && e.message });
     });
@@ -93,12 +117,15 @@ window.onload = startPayment;
 </html>`;
 }
 
+// method: 토스 v2 결제창 결제수단(기본 'CARD' = 카드/간편결제 통합결제창)
+// easyPay: 간편결제사 코드('TOSSPAY' 등). 지정하면 해당 간편결제 창이 바로 열린다.
 export default function TossPaymentModal({
-  visible, onClose, clientKey, customerKey, amount, orderId, orderName, onSuccess, onFail,
+  visible, onClose, clientKey, customerKey, amount, orderId, orderName,
+  method = 'CARD', easyPay = null, onSuccess, onFail,
 }) {
   const html = useMemo(
-    () => buildHtml({ clientKey, customerKey, amount, orderId, orderName }),
-    [clientKey, customerKey, amount, orderId, orderName],
+    () => buildHtml({ clientKey, customerKey, amount, orderId, orderName, method, easyPay }),
+    [clientKey, customerKey, amount, orderId, orderName, method, easyPay],
   );
   // 결과 이중 발화 가드 — 리다이렉트/메시지가 중복 도착해도 콜백은 세션당 1회만.
   const firedRef = React.useRef(false);

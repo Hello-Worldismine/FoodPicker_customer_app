@@ -24,10 +24,15 @@ export default function SignUpScreen({ navigation }) {
 
     setLoading(true);
     // name → raw_user_meta_data.name (주문/리뷰 표시명으로 서버 RPC 가 마스킹해 사용)
+    // emailRedirectTo: 인증 메일의 링크가 앱으로 돌아오게 한다(app.json 의 scheme: foodpicker).
+    // Supabase 대시보드 Authentication → URL Configuration → Redirect URLs 에도 등록해야 한다.
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
-      options: { data: { name: name.trim() } },
+      options: {
+        data: { name: name.trim() },
+        emailRedirectTo: 'foodpicker://auth-callback',
+      },
     });
     setLoading(false);
 

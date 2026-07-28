@@ -3,11 +3,12 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, ShieldCheck, Check, Tag, X, MapPin } from 'lucide-react-native';
+import { ArrowLeft, ShieldCheck, Check, Tag, X, MapPin, CreditCard, Smartphone } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
-import { confirmTossPayment } from '../lib/api';
+import { confirmTossPayment, fetchMyPaymentPref } from '../lib/api';
+import { EASY_PAY_LABEL } from '../lib/format';
 import TossPaymentModal from '../components/TossPaymentModal';
 
 function fmtDeadline(minutes) {
@@ -71,6 +72,15 @@ function calcCouponDiscount(coupon, subtotal) {
   return Math.min(d, subtotal);
 }
 
+// 결제수단 선택지 — 카드 / 간편결제 로 한정한다.
+// 토스 v2 결제창은 두 경우 모두 method='CARD'(카드·간편결제 통합결제창)를 쓰고,
+// 간편결제사 코드가 지정돼 있으면 그 앱의 전용 창을 바로 연다(card.flowMode='DIRECT').
+// 계좌이체/가상계좌는 입금 지연·웹훅 처리가 없어 제공하지 않는다.
+const PAY_OPTIONS = [
+  { key: 'CARD',     label: '신용/체크카드', Icon: CreditCard },
+  { key: 'EASY_PAY', label: '간편결제',      Icon: Smartphone },
+];
+
 const CONFIRMS = [
   '소비기한 임박 상품임을 확인했습니다.',
   '주문 후 지정된 시간 이내에 방문해야 함을 확인했습니다.',
@@ -88,10 +98,28 @@ export default function OrderScreen({ navigation, route }) {
   const [showCouponSheet, setShowCouponSheet] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [tossVisible, setTossVisible] = useState(false);
-  // 결제 세션 스냅샷 — 결제창이 열린 동안 금액/주문번호가 재계산으로 흔들리지 않게 고정.
-  const [tossSession, setTossSession] = useState(null); // { orderId, amount }
+  // 결제 세션 스냅샷 — 결제창이 열린 동안 금액/주문번호/결제수단이 흔들리지 않게 고정.
+  const [tossSession, setTossSession] = useState(null); // { orderId, amount, method, easyPay }
+  // 결제수단(이 주문에만 적용). 기본값은 마이페이지 > 결제수단 관리에 저장한 기본 결제수단.
+  const [payMethod, setPayMethod] = useState('CARD');       // 'CARD' | 'EASY_PAY'
+  const [easyPayProvider, setEasyPayProvider] = useState(null); // 'TOSSPAY' 등 | null
   // 이중 제출 가드(ref) — state 는 비동기라 연타 시 두 번 진입할 수 있다.
   const submittingRef = React.useRef(false);
+
+  // 기본 결제수단 로드. 결제수단 관리 화면에서 바꾸고 돌아오면 다시 반영한다.
+  React.useEffect(() => {
+    let alive = true;
+    const load = () => {
+      fetchMyPaymentPref().then(pref => {
+        if (!alive) return;
+        setPayMethod(pref.defaultMethod === 'EASY_PAY' ? 'EASY_PAY' : 'CARD');
+        setEasyPayProvider(pref.easyPayProvider);
+      }).catch(() => {}); // 미설정/조회 실패는 앱 기본값(카드) 유지
+    };
+    load();
+    const unsub = navigation.addListener('focus', load);
+    return () => { alive = false; unsub(); };
+  }, [navigation]);
 
   if (!product) return null;
 
@@ -164,8 +192,13 @@ export default function OrderScreen({ navigation, route }) {
       finalizeOrder({ amount: 0 });
       return;
     }
-    // 결제 세션 고정: 결제창이 열린 동안 금액이 재계산돼도 결제창/검증 기준은 불변.
-    setTossSession({ orderId: makeTossOrderId(), amount: finalPrice });
+    // 결제 세션 고정: 결제창이 열린 동안 금액/결제수단이 바뀌어도 결제창·검증 기준은 불변.
+    setTossSession({
+      orderId: makeTossOrderId(),
+      amount: finalPrice,
+      method: 'CARD', // 토스 v2 통합결제창(카드+간편결제)
+      easyPay: payMethod === 'EASY_PAY' ? easyPayProvider : null,
+    });
     setTossVisible(true);
   }
 
@@ -273,15 +306,43 @@ export default function OrderScreen({ navigation, route }) {
           ))}
         </View>
 
-        {/* 결제 수단 — 토스페이먼츠 결제창에서 선택 */}
+        {/* 결제 수단 (카드 / 간편결제) */}
         <View style={styles.card}>
-          <Text style={styles.sectionLabel}>결제 수단</Text>
+          <View style={styles.payHeaderRow}>
+            <Text style={[styles.sectionLabel, { marginBottom: 0 }]}>결제 수단</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('PaymentMethod')}>
+              <Text style={styles.payManageBtn}>결제수단 관리</Text>
+            </TouchableOpacity>
+          </View>
+          {PAY_OPTIONS.map(opt => {
+            const on = payMethod === opt.key;
+            // 간편결제사를 지정해두면 그 앱 창이 바로 열린다. 없으면 통합결제창에서 고른다.
+            const desc = opt.key === 'CARD'
+              ? '카드·간편결제 통합 결제창이 열려요'
+              : easyPayProvider
+                ? `${EASY_PAY_LABEL[easyPayProvider] || easyPayProvider} 결제창이 바로 열려요`
+                : '결제수단 관리에서 간편결제사를 지정하면 바로 열려요';
+            return (
+              <TouchableOpacity key={opt.key} onPress={() => setPayMethod(opt.key)}
+                style={[styles.payOption, on && styles.payOptionOn]}>
+                <View style={styles.payOptionIcon}>
+                  <opt.Icon size={18} color={on ? colors.primaryGreen : colors.mediumGray} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.payOptionName}>{opt.label}</Text>
+                  <Text style={styles.payOptionDesc}>{desc}</Text>
+                </View>
+                <View style={[styles.radio, on && styles.radioOn]}>
+                  {on && <View style={styles.radioDot} />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
           <View style={styles.tossPayCard}>
-            <ShieldCheck size={20} color={colors.primaryGreen} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.tossPayTitle}>토스페이먼츠 안전결제</Text>
-              <Text style={styles.tossPayDesc}>결제하기를 누르면 열리는 결제창에서 카드/간편결제를 선택할 수 있어요.</Text>
-            </View>
+            <ShieldCheck size={18} color={colors.primaryGreen} />
+            <Text style={styles.tossPayDesc}>
+              결제는 토스페이먼츠 결제창에서 진행되며, 카드번호는 앱에 저장되지 않아요.
+            </Text>
           </View>
         </View>
 
@@ -405,6 +466,8 @@ export default function OrderScreen({ navigation, route }) {
         amount={tossSession?.amount ?? 0}
         orderId={tossSession?.orderId ?? ''}
         orderName={(qty > 1 ? `${product.name} ${qty}개` : product.name).slice(0, 100)}
+        method={tossSession?.method ?? 'CARD'}
+        easyPay={tossSession?.easyPay ?? null}
         onSuccess={handleTossSuccess}
         onFail={handleTossFail}
       />
@@ -463,12 +526,34 @@ const styles = StyleSheet.create({
   selectedCouponName: { fontSize: 13, fontWeight: '700', color: colors.primaryGreen },
   selectedCouponInfo: { fontSize: 12, color: colors.primaryGreen, marginTop: 2 },
   selectedCouponDiscount: { fontSize: 15, fontWeight: '800', color: colors.primaryGreen },
-  tossPayCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: colors.freshMint, borderRadius: 12, padding: 14,
+  payHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12,
   },
-  tossPayTitle: { fontSize: 14, fontWeight: '700', color: colors.charcoalBlack },
-  tossPayDesc: { fontSize: 12, color: colors.mediumGray, marginTop: 3, lineHeight: 17 },
+  payManageBtn: { fontSize: 13, color: colors.primaryGreen, fontWeight: '700' },
+  payOption: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: colors.softGray, borderRadius: 12, padding: 12,
+    marginBottom: 8, borderWidth: 1.5, borderColor: 'transparent',
+  },
+  payOptionOn: { backgroundColor: colors.freshMint, borderColor: colors.primaryGreen },
+  payOptionIcon: {
+    width: 36, height: 36, borderRadius: 10, backgroundColor: colors.white,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  payOptionName: { fontSize: 14, fontWeight: '700', color: colors.charcoalBlack },
+  payOptionDesc: { fontSize: 12, color: colors.mediumGray, marginTop: 2 },
+  radio: {
+    width: 20, height: 20, borderRadius: 10, flexShrink: 0,
+    borderWidth: 2, borderColor: '#D0D3D7', backgroundColor: colors.white,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  radioOn: { borderColor: colors.primaryGreen },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primaryGreen },
+  tossPayCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: colors.freshMint, borderRadius: 12, padding: 12, marginTop: 4,
+  },
+  tossPayDesc: { fontSize: 12, color: '#15803D', lineHeight: 17, flex: 1 },
   priceRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
   priceLbl: { fontSize: 13, color: colors.mediumGray },
   priceVal: { fontSize: 13, fontWeight: '600', color: colors.charcoalBlack },

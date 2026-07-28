@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ClipboardList, Ticket, Heart, CreditCard, Bell, HelpCircle, FileText,
-  LogOut, UserX, ChevronRight, User,
+  LogOut, UserX, ChevronRight, User, Link2,
 } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
@@ -59,6 +59,7 @@ export default function MyPageScreen({ navigation }) {
     { key: 'coupons',     Icon: Ticket,        label: '쿠폰함',               onPress: () => navigation.navigate('Coupons'),      badge: coupons.length > 0 ? `${coupons.length}장` : null },
     { key: 'likedStores', Icon: Heart,         label: '관심 매장',             onPress: () => navigation.navigate('LikedStores'),  badge: likedStores.length > 0 ? `${likedStores.length}개` : null },
     { key: 'payment',  Icon: CreditCard,    label: '결제수단 관리',         onPress: () => navigation.navigate('PaymentMethod') },
+    { key: 'linked',   Icon: Link2,         label: '연결된 계정 관리',       onPress: () => navigation.navigate('LinkedAccounts') },
     { key: 'notif',    Icon: Bell,          label: '알림 설정',             onPress: () => navigation.navigate('NotificationSettings') },
     { key: 'support',  Icon: HelpCircle,    label: '고객센터',              onPress: () => navigation.navigate('Support') },
     { key: 'faq',      Icon: FileText,      label: '자주 묻는 질문',        onPress: () => navigation.navigate('FAQ') },

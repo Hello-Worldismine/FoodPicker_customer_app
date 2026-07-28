@@ -107,6 +107,38 @@ export function categoryEmoji(cat) {
   return map[cat] || '🍽️';
 }
 
+// ───────── 결제수단 표시 ─────────
+// user_payment_prefs.default_method(enum) → 한글 라벨.
+// 계좌이체/가상계좌는 입금 지연·웹훅 처리가 없어 앱에서 선택지로 제공하지 않지만,
+// DB 제약(check)에 존재하는 값이므로 표시 라벨은 갖춰둔다.
+export const PAYMENT_METHOD_LABEL = {
+  CARD: '카드',
+  EASY_PAY: '간편결제',
+  TRANSFER: '계좌이체',
+  VIRTUAL_ACCOUNT: '가상계좌',
+};
+
+// 토스페이먼츠 '간편결제사 코드' → 한글명 (docs.tosspayments.com/codes/org-codes)
+export const EASY_PAY_LABEL = {
+  TOSSPAY: '토스페이',
+  KAKAOPAY: '카카오페이',
+  NAVERPAY: '네이버페이',
+  PAYCO: '페이코',
+  SAMSUNGPAY: '삼성페이',
+  APPLEPAY: '애플페이',
+  LPAY: '엘페이',
+  SSG: 'SSG페이',
+  PINPAY: '핀페이',
+};
+
+// 결제수단 라벨 — orders.payment_method 에는 토스 승인 응답의 method 가 저장되므로
+// 이미 한글('카드'/'간편결제'/'계좌이체'…)인 경우가 많다. enum 코드면 한글로 바꾸고,
+// 아니면 원문을 그대로 보여준다(모르는 값을 임의로 바꾸지 않는다).
+export function paymentMethodLabel(v) {
+  if (!v) return '';
+  return PAYMENT_METHOD_LABEL[v] || EASY_PAY_LABEL[v] || String(v);
+}
+
 // 주문 상태 매핑: DB seller_status → 구매자 관점 status
 // (API_SPEC §5: 구매자 관점 = ORDER_SELLER_STATUS[x].userStatus)
 export const ORDER_STATUS = {
