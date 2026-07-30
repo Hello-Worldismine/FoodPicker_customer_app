@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
@@ -55,10 +56,17 @@ function OrderCard({ order }) {
 }
 
 export default function MyOrderListScreen({ navigation }) {
-  const { orders } = useApp();
+  const { orders, reloadOrders } = useApp();
   const sorted = [...orders].sort((a, b) => new Date(b.orderedAt) - new Date(a.orderedAt));
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(false);
+
+  // Realtime(AppContext) 이 끊긴 경우를 위한 폴백 — 화면 진입 시 주문을 다시 읽는다.
+  useFocusEffect(
+    useCallback(() => {
+      if (reloadOrders) reloadOrders().catch(e => console.warn('[주문내역] 재조회 실패:', e.message));
+    }, [reloadOrders]),
+  );
 
   const hasMore = visibleCount < sorted.length;
   const visible = sorted.slice(0, visibleCount);

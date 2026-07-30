@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { QrCode, Clock, MapPin, Star, Navigation } from 'lucide-react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { colors } from '../theme';
@@ -23,15 +24,21 @@ const TABS = [
   { key: 'cancelled', label: '취소·환불' },
 ];
 
-// TODO: 주문 목록을 GET /api/orders?status={tab}&page={page} 로 페이지네이션 처리하세요.
-//       실시간 상태 변경(픽업 완료 등)은 WebSocket 또는 주기적 폴링으로 처리 권장.
+// 주문 상태 변경(판매자 픽업완료 등)은 AppContext 의 Realtime 구독이 즉시 반영한다.
+// 아래 useFocusEffect 는 Realtime 이 끊긴 경우(백그라운드 복귀 등)를 위한 폴백이다.
 export default function OrderHistoryScreen({ navigation, route }) {
-  const { orders, handleCancelOrder } = useApp();
+  const { orders, handleCancelOrder, reloadOrders } = useApp();
   const [tab, setTab] = useState(route?.params?.initialTab ?? 'pending');
 
   useEffect(() => {
     if (route?.params?.initialTab) setTab(route.params.initialTab);
   }, [route?.params?.initialTab]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (reloadOrders) reloadOrders().catch(e => console.warn('[주문내역] 재조회 실패:', e.message));
+    }, [reloadOrders]),
+  );
   const [showQR, setShowQR] = useState(null);
   const [showCancel, setShowCancel] = useState(null);
 

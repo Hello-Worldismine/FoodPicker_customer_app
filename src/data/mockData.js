@@ -33,6 +33,14 @@ const todayStr = (() => {
   return d.toISOString();
 })();
 
+// 픽업 마감 '시각'(절대) — DB 계약(products.pickup_deadline_at)과 같은 형태의 ISO 문자열.
+// 소비기한(todayStr)을 넘지 않도록 클램프한다(DB 제약 pickup_deadline_at <= expiry_date 와 동일).
+function deadlineIn(minutes) {
+  const d = new Date(now.getTime() + minutes * 60000);
+  const limit = new Date(todayStr);
+  return (d > limit ? limit : d).toISOString();
+}
+
 export const products = [
   {
     id: 1,
@@ -47,7 +55,7 @@ export const products = [
     salePrice: 4900,
     discountRate: 45,
     stock: 3,
-    pickupDeadlineMinutes: 60,
+    pickupDeadlineAt: deadlineIn(60),
     expiryDate: todayStr,
     storage: '냉장 보관',
     status: 'selling',
@@ -77,7 +85,7 @@ export const products = [
     salePrice: 1900,
     discountRate: 60,
     stock: 5,
-    pickupDeadlineMinutes: 30,
+    pickupDeadlineAt: deadlineIn(30),
     expiryDate: todayStr,
     storage: '실온 보관',
     status: 'selling',
@@ -107,7 +115,7 @@ export const products = [
     salePrice: 3500,
     discountRate: 53,
     stock: 0,
-    pickupDeadlineMinutes: 60,
+    pickupDeadlineAt: deadlineIn(60),
     expiryDate: todayStr,
     storage: '냉장 보관',
     status: 'soldout',
@@ -137,7 +145,7 @@ export const products = [
     salePrice: 2200,
     discountRate: 60,
     stock: 2,
-    pickupDeadlineMinutes: 30,
+    pickupDeadlineAt: deadlineIn(30),
     expiryDate: todayStr,
     storage: '냉장 보관',
     status: 'selling',
@@ -167,7 +175,7 @@ export const products = [
     salePrice: 2500,
     discountRate: 58,
     stock: 4,
-    pickupDeadlineMinutes: 90,
+    pickupDeadlineAt: deadlineIn(90),
     expiryDate: todayStr,
     storage: '냉장 보관',
     status: 'selling',
@@ -197,7 +205,7 @@ export const products = [
     salePrice: 4500,
     discountRate: 54,
     stock: 6,
-    pickupDeadlineMinutes: 30,
+    pickupDeadlineAt: deadlineIn(30),
     expiryDate: todayStr,
     storage: '냉장 보관',
     status: 'selling',
@@ -298,8 +306,11 @@ export const mockOrders = [
     store: '그린샐러드 강남점',
     storeId: 1,
     storeAddress: '서울 강남구 테헤란로 123',
+    // 주문은 상품의 마감 '시각'을 그대로 스냅샷한다(orders.pickup_deadline_at).
+    // pickupDeadlineMinutes 는 주문 시점 기준 '남은 분'(하위호환).
+    pickupDeadlineAt: deadlineIn(60),
     pickupDeadlineMinutes: 60,
-    pickupDeadline: (() => { const d = new Date(Date.now() + 60 * 60000); const h = d.getHours(); const ampm = h >= 12 ? '오후' : '오전'; return `${ampm} ${h > 12 ? h - 12 : h}:${String(d.getMinutes()).padStart(2,'0')}까지`; })(),
+    pickupDeadline: (() => { const d = new Date(deadlineIn(60)); return `오늘 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}까지`; })(),
     quantity: 1,
     totalPrice: 4900,
     discountedPrice: 4900,
@@ -314,8 +325,9 @@ export const mockOrders = [
     store: '베이커리온 역삼점',
     storeId: 2,
     storeAddress: '서울 강남구 역삼로 45',
+    pickupDeadlineAt: todayAt(18, 30),
     pickupDeadlineMinutes: 30,
-    pickupDeadline: '오후 6:30까지',
+    pickupDeadline: '오늘 18:30까지',
     quantity: 2,
     totalPrice: 3800,
     discountedPrice: 2800,

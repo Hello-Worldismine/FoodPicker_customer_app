@@ -39,6 +39,8 @@ function mapProductRow(r, storeRow, favProducts) {
     salePrice: r.sale_price,
     discountRate: r.discount_rate,
     stock: r.stock,
+    // 픽업 마감은 '시각'(pickup_deadline_at)이 정본. minutes 는 구 데이터 폴백 표시용.
+    pickupDeadlineAt: r.pickup_deadline_at || null,
     pickupDeadlineMinutes: r.pickup_deadline_minutes,
     expiryDate: r.expiry_date,
     storage: fmt.storageToDisplay(r.storage),
@@ -100,8 +102,12 @@ function mapOrder(r) {
     store: r.store_name,
     storeId: r.store_id,
     storeAddress: r.store_address,
+    // 주문 시점에 스냅샷된 마감 시각이 정본. 값이 없는 구 주문만 '주문시각 + N분' 으로 폴백한다.
+    pickupDeadlineAt: r.pickup_deadline_at || null,
     pickupDeadlineMinutes: r.pickup_deadline_minutes,
-    pickupDeadline: fmt.formatDeadlineTime(r.ordered_at, r.pickup_deadline_minutes),
+    pickupDeadline: r.pickup_deadline_at
+      ? fmt.formatDeadlineClock(r.pickup_deadline_at)
+      : fmt.formatDeadlineTime(r.ordered_at, r.pickup_deadline_minutes),
     quantity: r.quantity,
     totalPrice: r.total_price,
     discountedPrice: r.amount,

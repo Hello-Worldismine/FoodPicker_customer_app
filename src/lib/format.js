@@ -39,7 +39,41 @@ export function distanceMeters(lat1, lng1, lat2, lng2) {
   return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-// 픽업 마감 시간(분) → '주문 후 30분 이내 / 1시간 이내 / 1시간 30분 이내 / 2시간 이내'
+// ───────── 픽업 마감(절대 시각) ─────────
+// 정본은 products/orders 의 pickup_deadline_at(timestamptz).
+// 아래 formatDeadlineDuration / formatDeadlineTime 은 마감 시각이 없는 구 데이터 폴백용으로만 남긴다.
+
+// pickup_deadline_at(ISO) → '오늘 20:50까지' / '내일 09:00까지' / '7.31 09:00까지'
+export function formatDeadlineClock(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const day = new Date(d); day.setHours(0, 0, 0, 0);
+  const dayDiff = Math.round((day - today) / 86400000);
+  const dayLabel = dayDiff === 0 ? '오늘'
+    : dayDiff === 1 ? '내일'
+    : dayDiff === -1 ? '어제'
+    : `${d.getMonth() + 1}.${d.getDate()}`;
+  return `${dayLabel} ${hm}까지`;
+}
+
+// 마감까지 남은 분(음수면 이미 마감). 값이 없으면 null.
+export function minutesUntilDeadline(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return Math.floor((d.getTime() - Date.now()) / 60000);
+}
+
+// 마감 임박(기본 30분 이내 · 아직 지나지 않음) — 서버 알림(send_pickup_reminders)과 같은 기준.
+export function isDeadlineSoon(iso, thresholdMin = 30) {
+  const left = minutesUntilDeadline(iso);
+  return left != null && left >= 0 && left <= thresholdMin;
+}
+
+// (하위 호환) 픽업 마감 시간(분) → '주문 후 30분 이내 / 1시간 이내 / 1시간 30분 이내 / 2시간 이내'
 export function formatDeadlineDuration(minutes) {
   if (!minutes) return '';
   if (minutes < 60) return `주문 후 ${minutes}분 이내`;
@@ -47,7 +81,7 @@ export function formatDeadlineDuration(minutes) {
   return `주문 후 ${Math.floor(minutes / 60)}시간 ${minutes % 60}분 이내`;
 }
 
-// orderedAt(ISO) + deadlineMinutes → '오후 3:30까지'
+// (하위 호환) orderedAt(ISO) + deadlineMinutes → '오후 3:30까지'
 export function formatDeadlineTime(orderedAt, deadlineMinutes) {
   if (!orderedAt || !deadlineMinutes) return '';
   const d = new Date(new Date(orderedAt).getTime() + deadlineMinutes * 60000);

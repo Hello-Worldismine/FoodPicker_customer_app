@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import * as api from '../lib/api';
 import { registerForPushNotifications } from '../lib/push';
+import { subscribeBuyerRealtime } from '../lib/realtime';
 
 // 소비자 앱 전역 상태 — Supabase 실데이터. 세션(구매자) 기준으로 로드/초기화.
 const AppContext = createContext(null);
@@ -18,6 +19,20 @@ export function AppProvider({ children }) {
   const [notifications, setNotifications] = useState([]);
   const [currentAddressId, setCurrentAddressId] = useState(null);
   const [loading, setLoading] = useState(true);
+  // 화면 상단 안내 배너(OrderStatusToast) — { key, message, tone } | null
+  const [toast, setToast] = useState(null);
+
+  // Realtime 콜백에서 '직전 주문 상태'를 참조하기 위한 ref(상태 전이 판정용).
+  const ordersRef = useRef([]);
+  useEffect(() => { ordersRef.current = orders; }, [orders]);
+  // 사용자가 직접 취소한 주문 — 본인 액션의 결과를 Realtime 이 다시 안내하지 않도록 표시해 둔다.
+  const selfCancelledRef = useRef(new Set());
+
+  const showToast = useCallback((message, tone = 'info') => {
+    if (!message) return;
+    setToast({ key: `${Date.now()}-${Math.random()}`, message, tone });
+  }, []);
+  const hideToast = useCallback(() => { setToast(null); }, []);
 
   const reloadCatalog = useCallback(async () => {
     const { products, stores } = await api.loadCatalog();
@@ -66,9 +81,39 @@ export function AppProvider({ children }) {
       registerForPushNotifications().catch(() => {}); // 실기기 EAS 빌드에서만 실제 등록
     } else {
       setProductList([]); setStores([]); setOrders([]); setCoupons([]); setUsedCoupons([]);
-      setPriceAlerts([]); setAddresses([]); setNotifications([]); setCurrentAddressId(null); setLoading(false);
+      setPriceAlerts([]); setAddresses([]); setNotifications([]); setCurrentAddressId(null);
+      setToast(null); setLoading(false);
     }
   }, [user, loadAll]);
+
+  // ── 실시간 반영(구매자 전용 Realtime) ──
+  // 판매자가 QR 스캔으로 픽업완료 처리하면 orders.seller_status 가 서버에서 바뀐다.
+  // 사용자 액션이 없으므로 구독 없이는 앱에 도달할 경로가 없다 → 여기서 구독한다.
+  useEffect(() => {
+    if (!user) return undefined;
+    const unsubscribe = subscribeBuyerRealtime(user.id, {
+      onOrderUpdate: (payload) => {
+        const row = (payload && payload.new) || {};
+        // ⚠️ payload.old 는 REPLICA IDENTITY 가 FULL 이 아니면 비어 있다.
+        //    → 직전 로컬 상태(order_code 기준)의 sellerStatus 와 비교해 전이를 판정한다.
+        const prev = ordersRef.current.find(o => o.id === row.order_code);
+        const before = prev ? prev.sellerStatus : null;
+        if (row.seller_status === 'completed' && before !== 'completed') {
+          showToast('픽업이 완료되었습니다', 'success');
+        } else if (row.seller_status === 'cancelled' && before !== 'cancelled') {
+          // 본인이 취소한 건이면 안내를 생략한다(이미 화면에서 확인한 결과).
+          if (selfCancelledRef.current.has(row.order_code)) selfCancelledRef.current.delete(row.order_code);
+          else showToast('주문이 취소되었습니다', 'warn');
+        }
+        // 주문만 다시 읽는다(카탈로그는 호출 비용이 커 여기서 갱신하지 않는다).
+        reloadOrders().catch(e => console.warn('[realtime] 주문 재조회 실패:', e.message));
+      },
+      onNotificationInsert: () => {
+        reloadNotifications().catch(e => console.warn('[realtime] 알림 재조회 실패:', e.message));
+      },
+    });
+    return unsubscribe;
+  }, [user, reloadOrders, reloadNotifications, showToast]);
 
   const likedStores = stores.filter(s => s.liked).map(s => s.id);
   const currentAddress = addresses.find(a => a.id === currentAddressId) || addresses[0] || null;
@@ -117,7 +162,13 @@ export function AppProvider({ children }) {
     return order;
   }
   async function handleCancelOrder(orderCode) {
-    await api.cancelOrder(orderCode); // 실패 시 throw
+    selfCancelledRef.current.add(orderCode); // Realtime 중복 안내 방지
+    try {
+      await api.cancelOrder(orderCode); // 실패 시 throw
+    } catch (e) {
+      selfCancelledRef.current.delete(orderCode);
+      throw e;
+    }
     await Promise.all([reloadOrders(), reloadCatalog()]);
   }
   // 하위호환: 일부 화면이 handleOrderComplete(order) 호출 → 서버 재로딩으로 대체
@@ -187,6 +238,10 @@ export function AppProvider({ children }) {
       removePriceAlert,
       markNotificationRead,
       updateLocation,
+      toast,
+      showToast,
+      hideToast,
+      reloadOrders,
       reload: loadAll,
       fetchProductReviews: api.fetchProductReviews,
       fetchStoreReviews: api.fetchStoreReviews,

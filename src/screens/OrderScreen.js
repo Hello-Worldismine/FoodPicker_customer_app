@@ -8,14 +8,14 @@ import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { confirmTossPayment, fetchMyPaymentPref } from '../lib/api';
-import { EASY_PAY_LABEL } from '../lib/format';
+import { EASY_PAY_LABEL, formatDeadlineClock, formatDeadlineDuration } from '../lib/format';
 import TossPaymentModal from '../components/TossPaymentModal';
 
-function fmtDeadline(minutes) {
-  if (!minutes) return '';
-  if (minutes < 60) return `주문 후 ${minutes}분 이내`;
-  if (minutes % 60 === 0) return `주문 후 ${minutes / 60}시간 이내`;
-  return `주문 후 ${Math.floor(minutes / 60)}시간 ${minutes % 60}분 이내`;
+// 픽업 마감 표기 — 마감 시각(정본)이 있으면 '오늘 20:50까지',
+// 없는 구 데이터만 '주문 후 N분 이내' 로 폴백한다(다른 화면의 pickupLabel 과 동일 규칙).
+function pickupLabel(product) {
+  if (product.pickupDeadlineAt) return formatDeadlineClock(product.pickupDeadlineAt);
+  return formatDeadlineDuration(product.pickupDeadlineMinutes);
 }
 
 function formatDate(iso) {
@@ -83,7 +83,7 @@ const PAY_OPTIONS = [
 
 const CONFIRMS = [
   '소비기한 임박 상품임을 확인했습니다.',
-  '주문 후 지정된 시간 이내에 방문해야 함을 확인했습니다.',
+  '픽업 마감 시각까지 매장에 방문해야 함을 확인했습니다.',
   '픽업 후 단순 변심 환불이 제한될 수 있음을 확인했습니다.',
 ];
 
@@ -252,7 +252,7 @@ export default function OrderScreen({ navigation, route }) {
           <Text style={styles.sectionLabel}>픽업 정보</Text>
           {[
             { label: '픽업 매장', value: product.store },
-            { label: '픽업 마감', value: fmtDeadline(product.pickupDeadlineMinutes) },
+            { label: '픽업 마감', value: pickupLabel(product) },
             { label: '소비기한', value: formatDate(product.expiryDate) },
           ].map((item, idx) => (
             <View key={item.label} style={[styles.infoRow, idx < 2 && styles.infoRowBorder]}>
