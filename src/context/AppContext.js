@@ -25,8 +25,6 @@ export function AppProvider({ children }) {
   // Realtime 콜백에서 '직전 주문 상태'를 참조하기 위한 ref(상태 전이 판정용).
   const ordersRef = useRef([]);
   useEffect(() => { ordersRef.current = orders; }, [orders]);
-  // 사용자가 직접 취소한 주문 — 본인 액션의 결과를 Realtime 이 다시 안내하지 않도록 표시해 둔다.
-  const selfCancelledRef = useRef(new Set());
 
   const showToast = useCallback((message, tone = 'info') => {
     if (!message) return;
@@ -98,12 +96,18 @@ export function AppProvider({ children }) {
         //    → 직전 로컬 상태(order_code 기준)의 sellerStatus 와 비교해 전이를 판정한다.
         const prev = ordersRef.current.find(o => o.id === row.order_code);
         const before = prev ? prev.sellerStatus : null;
+        const beforeReq = prev ? prev.cancelRequestStatus : null;
         if (row.seller_status === 'completed' && before !== 'completed') {
           showToast('픽업이 완료되었습니다', 'success');
         } else if (row.seller_status === 'cancelled' && before !== 'cancelled') {
-          // 본인이 취소한 건이면 안내를 생략한다(이미 화면에서 확인한 결과).
-          if (selfCancelledRef.current.has(row.order_code)) selfCancelledRef.current.delete(row.order_code);
-          else showToast('주문이 취소되었습니다', 'warn');
+          // 취소는 판매자가 확정한다 — 본인이 요청했더라도 '승인' 결과는 반드시 알려야 한다.
+          if (row.cancel_request_status === 'approved') {
+            showToast('취소 승인 · 전액 환불되었습니다', 'success');
+          } else {
+            showToast('주문이 취소되었습니다', 'warn');
+          }
+        } else if (row.cancel_request_status === 'rejected' && beforeReq === 'requested') {
+          showToast('취소 요청이 거절되었습니다', 'warn');
         }
         // 주문만 다시 읽는다(카탈로그는 호출 비용이 커 여기서 갱신하지 않는다).
         reloadOrders().catch(e => console.warn('[realtime] 주문 재조회 실패:', e.message));
@@ -161,15 +165,12 @@ export function AppProvider({ children }) {
     await Promise.all([reloadOrders(), reloadCatalog(), reloadCoupons()]);
     return order;
   }
-  async function handleCancelOrder(orderCode) {
-    selfCancelledRef.current.add(orderCode); // Realtime 중복 안내 방지
-    try {
-      await api.cancelOrder(orderCode); // 실패 시 throw
-    } catch (e) {
-      selfCancelledRef.current.delete(orderCode);
-      throw e;
-    }
-    await Promise.all([reloadOrders(), reloadCatalog()]);
+  // 주문 취소 '요청'. 실제 취소/환불은 판매자가 승인한 시점에 확정된다.
+  // 재고·쿠폰도 승인 시점에 복구되므로 여기서는 주문 목록만 다시 읽는다.
+  async function handleRequestCancelOrder(orderCode, reason = null) {
+    await api.requestOrderCancel(orderCode, reason); // 실패 시 throw
+    await reloadOrders();
+    showToast('취소 요청이 접수되었습니다 · 판매자 승인을 기다려주세요', 'info');
   }
   // 하위호환: 일부 화면이 handleOrderComplete(order) 호출 → 서버 재로딩으로 대체
   function handleOrderComplete() { reloadOrders(); reloadCatalog(); }
@@ -230,7 +231,7 @@ export function AppProvider({ children }) {
       handleUpdateAddress,
       handleDeleteAddress,
       handleOrderComplete,
-      handleCancelOrder,
+      handleRequestCancelOrder,
       placeOrder,
       submitReview,
       redeemCoupon,

@@ -23,7 +23,9 @@ export default function SignUpScreen({ navigation }) {
     if (password !== passwordConfirm) { Alert.alert('입력 확인', '비밀번호가 일치하지 않습니다.'); return; }
 
     setLoading(true);
-    // name → raw_user_meta_data.name (주문/리뷰 표시명으로 서버 RPC 가 마스킹해 사용)
+    // name → raw_user_meta_data.name (실명. 표시명으로 쓰이지 않는다)
+    // 판매자에게 보이는 표시명은 가입 후 온보딩(ProfileSetupScreen)에서 정하는 nickname 이고,
+    // 닉네임이 없을 때만 서버가 이 name 을 마스킹('정**')해 폴백한다.
     // emailRedirectTo: 인증 메일의 링크가 앱으로 돌아오게 한다(app.json 의 scheme: foodpicker).
     // Supabase 대시보드 Authentication → URL Configuration → Redirect URLs 에도 등록해야 한다.
     const { data, error } = await supabase.auth.signUp({
@@ -62,6 +64,7 @@ export default function SignUpScreen({ navigation }) {
         <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
           <Text style={styles.label}>이름</Text>
           <TextInput style={styles.input} placeholder="이름" placeholderTextColor="#C4C9D0" value={name} onChangeText={setName} />
+          <Text style={styles.hint}>판매자에게는 실명이 아닌 닉네임이 표시됩니다. 닉네임은 가입 후 설정해요.</Text>
           <Text style={styles.label}>이메일</Text>
           <TextInput style={styles.input} placeholder="email@example.com" placeholderTextColor="#C4C9D0"
             autoCapitalize="none" autoCorrect={false} keyboardType="email-address" value={email} onChangeText={setEmail} />
@@ -83,4 +86,6 @@ export default function SignUpScreen({ navigation }) {
 const styles = StyleSheet.create({
   label: { fontSize: 13, color: '#6B7280', marginBottom: 6, fontWeight: '600' },
   input: { backgroundColor: colors.softGray, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, color: colors.charcoalBlack, marginBottom: 16 },
+  // 이름 입력란 바로 아래 도움말 — 입력란의 marginBottom 을 상쇄해 간격을 유지한다.
+  hint: { fontSize: 12, color: '#6B7280', lineHeight: 18, marginTop: -10, marginBottom: 16 },
 });

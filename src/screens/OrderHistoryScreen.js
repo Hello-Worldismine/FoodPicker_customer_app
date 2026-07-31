@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal,
+  TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -9,6 +10,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 import { openDirections, openInMaps } from '../lib/maps';
+import { CANCEL_REQUEST_WINDOW_MS } from '../lib/api';
 
 const STATUS = {
   pickupReady: { label: '픽업 대기', color: colors.primaryGreen, bg: colors.freshMint },
@@ -24,10 +26,16 @@ const TABS = [
   { key: 'cancelled', label: '취소·환불' },
 ];
 
+// 취소 요청 마감까지 남은 시간 라벨. 1분 미만이면 초 단위로 보여준다.
+function remainLabel(ms) {
+  if (ms >= 60000) return `${Math.floor(ms / 60000)}분 남음`;
+  return `${Math.max(1, Math.ceil(ms / 1000))}초 남음`;
+}
+
 // 주문 상태 변경(판매자 픽업완료 등)은 AppContext 의 Realtime 구독이 즉시 반영한다.
 // 아래 useFocusEffect 는 Realtime 이 끊긴 경우(백그라운드 복귀 등)를 위한 폴백이다.
 export default function OrderHistoryScreen({ navigation, route }) {
-  const { orders, handleCancelOrder, reloadOrders } = useApp();
+  const { orders, handleRequestCancelOrder, reloadOrders } = useApp();
   const [tab, setTab] = useState(route?.params?.initialTab ?? 'pending');
 
   useEffect(() => {
@@ -41,6 +49,32 @@ export default function OrderHistoryScreen({ navigation, route }) {
   );
   const [showQR, setShowQR] = useState(null);
   const [showCancel, setShowCancel] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  // 취소 요청 카운트다운용 시계(1초). 주문내역 화면에 있을 때만 돈다.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  function openCancelSheet(order) {
+    setCancelReason('');
+    setShowCancel(order);
+  }
+  async function submitCancelRequest() {
+    if (submitting || !showCancel) return;
+    setSubmitting(true);
+    try {
+      await handleRequestCancelOrder(showCancel.id, cancelReason);
+      setShowCancel(null);
+      setCancelReason('');
+    } catch (e) {
+      Alert.alert('취소 요청 실패', e.message || '잠시 후 다시 시도해주세요.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   const filtered = orders.filter(o => {
     if (tab === 'pending')   return o.status === 'pickupReady' || o.status === 'pending';
@@ -72,6 +106,16 @@ export default function OrderHistoryScreen({ navigation, route }) {
         ) : filtered.map(order => {
           const st = STATUS[order.status] || STATUS.pending;
           const isPending = order.status === 'pickupReady' || order.status === 'pending';
+          // 취소 요청 승인 대기 중에도 픽업은 여전히 가능하다 — QR·길찾기를 감추면 구매자가
+          // 취소도 픽업도 못 하는 상태에 갇힌다. 픽업이 먼저 완료되면 서버 respond_order_cancel 이
+          // ALREADY_COMPLETED 로 승인을 막으므로 DB 정합은 유지된다.
+          const showPickupInfo = isPending || order.status === 'cancelling';
+          // 취소 요청은 주문 후 10분 이내에만 가능(서버 cancel_request_window() 와 동일 정책).
+          // 한 번 요청/거절된 주문은 다시 요청할 수 없다 — 판매자 판단이 확정된 건이다.
+          const remainMs = order.orderedAt
+            ? new Date(order.orderedAt).getTime() + CANCEL_REQUEST_WINDOW_MS - now
+            : 0;
+          const canRequestCancel = isPending && !order.cancelRequestStatus && remainMs > 0;
           return (
             <View key={order.id} style={styles.card}>
               {/* 상태 배지 + 상품명 */}
@@ -102,9 +146,52 @@ export default function OrderHistoryScreen({ navigation, route }) {
                 )}
               </View>
 
-              {/* 픽업 대기: 매장 주소 + 지도 + 버튼 */}
-              {isPending && (
+              {/* 취소 요청 접수됨 — 판매자 승인 대기 */}
+              {order.status === 'cancelling' && (
+                <View style={styles.noticeBox}>
+                  <Text style={styles.noticeTitle}>판매자 승인 대기 중</Text>
+                  <Text style={styles.noticeText}>
+                    판매자가 승인하면 결제금액 전액이 환불됩니다(수수료 차감 없음).{'\n'}
+                    접수된 취소 요청은 철회할 수 없지만, 승인 전에 픽업하시면 요청은 자동으로 무효가 됩니다.
+                  </Text>
+                  {!!order.cancelRequestReason && (
+                    <Text style={styles.noticeMeta}>요청 사유: {order.cancelRequestReason}</Text>
+                  )}
+                </View>
+              )}
+
+              {/* 취소 요청 거절 — 주문은 그대로 유지된다(픽업 진행) */}
+              {order.cancelRequestStatus === 'rejected' && (
+                <View style={styles.rejectBox}>
+                  <Text style={styles.rejectTitle}>취소 요청이 거절되었습니다</Text>
+                  <Text style={styles.rejectText}>
+                    {order.cancelResponseReason
+                      ? `사유: ${order.cancelResponseReason}`
+                      : '자세한 사유는 판매자에게 문의해주세요.'}
+                  </Text>
+                </View>
+              )}
+
+              {/* 취소 승인 — 전액 환불 */}
+              {order.cancelRequestStatus === 'approved' && order.status === 'cancelled' && (
+                <View style={styles.noticeBox}>
+                  <Text style={styles.noticeTitle}>취소 승인 · 전액 환불</Text>
+                  <Text style={styles.noticeText}>
+                    결제금액 {(order.refundAmount || order.discountedPrice || 0).toLocaleString()}원이
+                    수수료 차감 없이 환불됩니다. 카드사에 따라 영업일 기준 3~5일이 걸릴 수 있습니다.
+                  </Text>
+                </View>
+              )}
+
+              {/* 픽업 대기: 매장 주소 + 지도 + 버튼 (취소 요청 대기 중에도 그대로 노출) */}
+              {showPickupInfo && (
                 <>
+                  {order.status === 'cancelling' && (
+                    <Text style={styles.pickupHint}>
+                      취소 요청 승인 대기 중 · 지금 픽업하시면 취소 요청은 자동으로 무효가 됩니다.
+                    </Text>
+                  )}
+
                   {/* 매장 주소 행 */}
                   <View style={styles.storeRow}>
                     <View style={styles.storeRowLeft}>
@@ -139,16 +226,25 @@ export default function OrderHistoryScreen({ navigation, route }) {
                     <Text style={styles.mapLabel}>탭하여 지도 보기</Text>
                   </TouchableOpacity>
 
-                  {/* QR + 취소 버튼 */}
+                  {/* QR + 취소 요청 버튼(10분 창 안에서만 노출) */}
                   <View style={styles.actionRow}>
                     <TouchableOpacity style={styles.qrBtn} onPress={() => setShowQR(order)}>
                       <QrCode size={14} color={colors.primaryGreen} />
                       <Text style={styles.qrBtnText}>QR 보기</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCancel(order)}>
-                      <Text style={styles.cancelBtnText}>취소 요청</Text>
-                    </TouchableOpacity>
+                    {canRequestCancel && (
+                      <TouchableOpacity style={styles.cancelBtn} onPress={() => openCancelSheet(order)}>
+                        <Text style={styles.cancelBtnText}>취소 요청</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
+                  {canRequestCancel ? (
+                    <Text style={styles.windowHint}>취소 요청 가능 · {remainLabel(remainMs)}</Text>
+                  ) : !order.cancelRequestStatus ? (
+                    <Text style={styles.windowHint}>
+                      취소 요청 가능 시간(주문 후 10분)이 지났습니다. 판매자에게 문의해주세요.
+                    </Text>
+                  ) : null}
                 </>
               )}
 
@@ -187,21 +283,42 @@ export default function OrderHistoryScreen({ navigation, route }) {
         </TouchableOpacity>
       </Modal>
 
-      {/* 취소 확인 모달 */}
-      <Modal visible={!!showCancel} transparent animationType="slide">
-        <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowCancel(null)} />
-        <View style={styles.cancelSheet}>
-          <Text style={styles.cancelSheetTitle}>주문을 취소할까요?</Text>
-          <Text style={styles.cancelSheetSub}>취소된 주문은 복구할 수 없습니다.{'\n'}식품 특성상 픽업 후 취소는 불가합니다.</Text>
-          <View style={styles.cancelSheetBtns}>
-            <TouchableOpacity style={styles.cancelSheetBack} onPress={() => setShowCancel(null)}>
-              <Text style={styles.cancelSheetBackText}>돌아가기</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelSheetConfirm} onPress={() => { handleCancelOrder(showCancel.id); setShowCancel(null); }}>
-              <Text style={styles.cancelSheetConfirmText}>취소하기</Text>
-            </TouchableOpacity>
+      {/* 취소 요청 모달 — 실제 취소/환불은 판매자 승인 시점에 확정된다 */}
+      <Modal visible={!!showCancel} transparent animationType="slide" onRequestClose={() => setShowCancel(null)}>
+        <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => setShowCancel(null)} />
+          <View style={styles.cancelSheet}>
+            <Text style={styles.cancelSheetTitle}>주문 취소를 요청할까요?</Text>
+            <Text style={styles.cancelSheetSub}>
+              판매자 승인 후 결제금액 전액이 환불됩니다(수수료 차감 없음).{'\n'}
+              요청은 철회할 수 없으며, 식품 특성상 픽업 후 취소는 불가합니다.
+            </Text>
+            <Text style={styles.reasonLabel}>취소 사유 (선택)</Text>
+            <TextInput
+              style={styles.reasonInput}
+              value={cancelReason}
+              onChangeText={setCancelReason}
+              placeholder="예: 시간 내 픽업이 어려워요"
+              placeholderTextColor={colors.mediumGray}
+              maxLength={100}
+              multiline
+            />
+            <View style={styles.cancelSheetBtns}>
+              <TouchableOpacity style={styles.cancelSheetBack} onPress={() => setShowCancel(null)} disabled={submitting}>
+                <Text style={styles.cancelSheetBackText}>돌아가기</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.cancelSheetConfirm, submitting && { opacity: 0.7 }]}
+                onPress={submitCancelRequest}
+                disabled={submitting}
+              >
+                {submitting
+                  ? <ActivityIndicator color={colors.white} />
+                  : <Text style={styles.cancelSheetConfirmText}>취소 요청</Text>}
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -283,11 +400,21 @@ const styles = StyleSheet.create({
   },
   mapLabel: { fontSize: 12, color: '#5A7A5A', fontWeight: '600', marginTop: 8 },
 
+  noticeBox: { backgroundColor: '#FEF3C7', borderRadius: 10, padding: 12, marginBottom: 12 },
+  noticeTitle: { fontSize: 13, fontWeight: '800', color: '#B45309', marginBottom: 4 },
+  noticeText: { fontSize: 12, color: '#8A5A08', lineHeight: 18 },
+  noticeMeta: { fontSize: 12, color: '#8A5A08', marginTop: 6 },
+  rejectBox: { backgroundColor: '#FFF0F0', borderRadius: 10, padding: 12, marginBottom: 12 },
+  rejectTitle: { fontSize: 13, fontWeight: '800', color: colors.alertRed, marginBottom: 4 },
+  rejectText: { fontSize: 12, color: '#9B2C2C', lineHeight: 18 },
+
   actionRow: { flexDirection: 'row', gap: 8 },
   qrBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, backgroundColor: colors.freshMint, borderRadius: 10, padding: 12 },
   qrBtnText: { fontSize: 13, fontWeight: '700', color: colors.primaryGreen },
   cancelBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF0F0', borderRadius: 10, padding: 12 },
   cancelBtnText: { fontSize: 13, fontWeight: '700', color: colors.alertRed },
+  windowHint: { fontSize: 11, color: colors.mediumGray, marginTop: 8, textAlign: 'center', lineHeight: 16 },
+  pickupHint: { fontSize: 11, color: '#B45309', fontWeight: '700', marginBottom: 8, lineHeight: 16 },
 
   reviewBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.freshMint, borderWidth: 1.5, borderColor: colors.primaryGreen, borderRadius: 10, padding: 10 },
   reviewBtnText: { fontSize: 13, fontWeight: '700', color: colors.primaryGreen },
@@ -303,7 +430,13 @@ const styles = StyleSheet.create({
   qrCloseBtnText: { color: colors.white, fontWeight: '700', fontSize: 15 },
   cancelSheet: { backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
   cancelSheetTitle: { fontSize: 18, fontWeight: '800', color: colors.charcoalBlack, marginBottom: 8 },
-  cancelSheetSub: { fontSize: 14, color: colors.mediumGray, lineHeight: 22, marginBottom: 24 },
+  cancelSheetSub: { fontSize: 14, color: colors.mediumGray, lineHeight: 22, marginBottom: 18 },
+  reasonLabel: { fontSize: 13, fontWeight: '700', color: colors.charcoalBlack, marginBottom: 8 },
+  reasonInput: {
+    backgroundColor: colors.softGray, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12, marginBottom: 20,
+    fontSize: 14, color: colors.charcoalBlack, minHeight: 68, textAlignVertical: 'top',
+  },
   cancelSheetBtns: { flexDirection: 'row', gap: 10 },
   cancelSheetBack: { flex: 1, backgroundColor: colors.softGray, borderRadius: 12, padding: 14, alignItems: 'center' },
   cancelSheetBackText: { fontSize: 15, fontWeight: '700', color: colors.charcoalBlack },

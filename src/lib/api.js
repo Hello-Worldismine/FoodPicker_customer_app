@@ -112,10 +112,20 @@ function mapOrder(r) {
     totalPrice: r.total_price,
     discountedPrice: r.amount,
     couponName: null,
-    status: (fmt.ORDER_STATUS[r.seller_status] || {}).key || 'pickupReady',
+    // 취소 요청 중(판매자 승인 대기)이면 seller_status 는 아직 new/confirmed 다.
+    // → 'cancelling' 파생 상태로 구분해 주문내역에서 '취소 요청' 배지를 띄운다.
+    status: r.cancel_request_status === 'requested'
+      ? 'cancelling'
+      : (fmt.ORDER_STATUS[r.seller_status] || {}).key || 'pickupReady',
     sellerStatus: r.seller_status,
+    // 취소 요청 흐름(20260731000000_cancel_request_flow.sql)
+    cancelRequestStatus: r.cancel_request_status || null,  // null|'requested'|'approved'|'rejected'
+    cancelRequestedAt: r.cancel_requested_at || null,
+    cancelRequestReason: r.cancel_request_reason || null,
+    cancelResponseReason: r.cancel_response_reason || null, // 거절 사유(구매자에게 노출)
+    refundAmount: r.refund_amount || 0,
     orderedAt: r.ordered_at,
-    paymentKey: r.payment_key || null, // 토스 결제 건 — 취소 시 PG 환불 선행에 사용
+    paymentKey: r.payment_key || null, // 토스 결제 건 — PG 환불은 판매자 승인 시점에 판매자앱이 실행
     // 실제 승인된 결제수단(토스 승인 응답의 method — '카드'/'간편결제'/…). 무결제 주문은 null.
     paymentMethod: r.payment_method || null,
   };
@@ -247,32 +257,37 @@ export async function confirmTossPayment({ paymentKey, orderId, amount, productI
   if (data && data.error) throw new Error(data.error);
   return mapOrder(data.order);
 }
-export async function cancelOrder(orderCode) {
-  // 토스 결제 주문이면 DB 취소 전에 PG 결제를 실제 환불(toss-cancel — 본인 주문 검증은 서버).
-  // toss-cancel 은 이미 취소된 결제를 성공으로 간주(멱등)하므로,
-  // 'PG 취소 성공 → DB 취소 실패' 후 재시도해도 여기서 막히지 않는다.
-  const { data: row, error: findError } = await supabase
-    .from('orders').select('payment_key').eq('order_code', orderCode).maybeSingle();
-  if (findError) throw findError;
-  if (row && row.payment_key) {
-    const { data: cancelData, error: cancelError } = await supabase.functions.invoke('toss-cancel', {
-      body: { paymentKey: row.payment_key, cancelReason: '구매자 주문 취소' },
-    });
-    if (cancelError) {
-      let msg = cancelError.message;
-      try {
-        if (cancelError.context && typeof cancelError.context.json === 'function') {
-          const body = await cancelError.context.json();
-          if (body && body.error) msg = body.error;
-        }
-      } catch (e) {}
-      throw new Error(msg || '결제 취소에 실패했습니다.');
-    }
-    if (cancelData && cancelData.error) throw new Error(cancelData.error);
+// ───────── 취소 요청 ─────────
+// 주문 취소는 '구매자 요청 → 판매자 승인' 2단계다(20260731000000_cancel_request_flow.sql).
+// 요청 가능 시간: 주문(ordered_at) 후 10분. 서버 정책 함수 cancel_request_window() 와 같은 값이며
+// 화면 카운트다운 표시에만 쓴다(최종 판정은 언제나 서버).
+export const CANCEL_REQUEST_WINDOW_MS = 10 * 60 * 1000;
+
+// request_order_cancel 은 클라이언트 분기를 위해 대문자 상수로 예외를 던진다 → 사용자 문구로 변환.
+function cancelRequestError(e) {
+  const m = (e && e.message) || '';
+  if (m.includes('WINDOW_EXPIRED')) {
+    return new Error('주문 후 10분이 지나 취소 요청을 할 수 없습니다. 판매자에게 문의해주세요.');
   }
-  // 본인 주문이 픽업 전(new/confirmed)일 때만 취소(서버 RPC, 재고 복구 포함).
-  const { data, error } = await supabase.rpc('cancel_my_order', { p_order_code: orderCode });
-  if (error) throw error;
+  if (m.includes('ALREADY_REQUESTED')) return new Error('이미 취소 요청이 접수되었습니다. 판매자 승인을 기다려주세요.');
+  if (m.includes('ALREADY_COMPLETED')) return new Error('이미 픽업이 완료된 주문입니다.');
+  if (m.includes('ALREADY_CANCELLED')) return new Error('이미 취소된 주문입니다.');
+  if (m.includes('NOT_PAID'))          return new Error('결제가 완료되지 않은 주문은 취소 요청을 할 수 없습니다.');
+  if (m.includes('NOT_MY_ORDER'))      return new Error('본인의 주문만 취소 요청할 수 있습니다.');
+  if (m.includes('ORDER_NOT_FOUND'))   return new Error('주문을 찾을 수 없습니다.');
+  if (m.includes('INVALID_CODE'))      return new Error('주문번호가 올바르지 않습니다.');
+  if (m.includes('NOT_AUTHENTICATED')) return new Error('로그인이 필요합니다.');
+  return new Error(m || '취소 요청 중 오류가 발생했습니다.');
+}
+
+// 취소 '요청'만 기록한다. PG 환불(toss-cancel)은 호출하지 않는다 —
+// 결제 취소는 판매자가 승인하는 시점에 판매자앱이 실행한다(PG 먼저, DB 나중).
+export async function requestOrderCancel(orderCode, reason = null) {
+  const { data, error } = await supabase.rpc('request_order_cancel', {
+    p_order_code: orderCode,
+    p_reason: reason && reason.trim() ? reason.trim() : null,
+  });
+  if (error) throw cancelRequestError(error);
   return mapOrder(data);
 }
 
@@ -497,6 +512,53 @@ export async function setPriceAlert(productId, targetPrice) {
 export async function removePriceAlert(productId) {
   const { error } = await supabase.from('price_alerts').delete().eq('product_id', productId);
   if (error) throw error;
+}
+
+// ───────── 프로필(닉네임) ─────────
+// 판매자에게 보여질 표시명은 raw_user_meta_data.nickname 이다(name = 실명이라 표시에 쓰지 않는다).
+// 저장은 클라이언트가 supabase.auth.updateUser 로 하고, 진행 중 주문의 buyer_name 반영은
+// 서버 RPC sync_my_display_name() 이 담당한다(20260731010000_buyer_nickname.sql).
+export const NICKNAME_MIN = 2;
+export const NICKNAME_MAX = 12;
+const NICKNAME_RESERVED = /(운영자|관리자|푸드피커|admin|foodpicker)/i;
+
+// 연속 공백을 하나로 줄이고 앞뒤 공백 제거.
+export function normalizeNickname(raw) {
+  return String(raw ?? '').replace(/\s+/g, ' ').trim();
+}
+// 검증 결과 { ok, value, message } — 화면에서 실시간 안내에도 쓴다(서버도 같은 규칙으로 재검증).
+export function validateNickname(raw) {
+  const value = normalizeNickname(raw);
+  if (value.length < NICKNAME_MIN || value.length > NICKNAME_MAX) {
+    return { ok: false, value, message: `닉네임은 ${NICKNAME_MIN}~${NICKNAME_MAX}자로 입력해주세요.` };
+  }
+  if (NICKNAME_RESERVED.test(value)) {
+    return { ok: false, value, message: '사용할 수 없는 닉네임입니다.' };
+  }
+  return { ok: true, value, message: '' };
+}
+
+// 진행 중 주문의 표시명 갱신만 수행(닉네임 저장 이후 호출).
+export async function syncDisplayName() {
+  const { data, error } = await supabase.rpc('sync_my_display_name');
+  if (error) throw error;
+  return data;
+}
+
+// 닉네임 저장 → 표시명 동기화. 반환값은 확정된 닉네임.
+// updateUser 가 USER_UPDATED 를 발생시켜 AuthContext 세션이 갱신되고 Gate/마이페이지가 자동 반영된다.
+export async function setMyNickname(nickname) {
+  const v = validateNickname(nickname);
+  if (!v.ok) throw new Error(v.message);
+  const { error } = await supabase.auth.updateUser({ data: { nickname: v.value } });
+  if (error) throw new Error(error.message || '닉네임 저장에 실패했습니다.');
+  // 동기화 실패(마이그레이션 미적용 등)해도 닉네임 저장 자체는 유지한다 — 다음 주문부터 반영된다.
+  try {
+    await syncDisplayName();
+  } catch (e) {
+    console.warn('[닉네임] 표시명 동기화 실패:', e.message);
+  }
+  return v.value;
 }
 
 // ───────── 회원 탈퇴 ─────────
