@@ -8,7 +8,7 @@ import {
   StyleSheet,
   Linking,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { X } from 'lucide-react-native';
 import { colors } from '../theme';
@@ -112,6 +112,13 @@ function startPayment() {
   }
 }
 window.onload = startPayment;
+// 키보드가 올라올 때(resize) 포커스된 입력란이 보이도록 스크롤
+document.addEventListener('focusin', function(e) {
+  var el = e.target;
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
+    setTimeout(function() { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 300);
+  }
+});
 </script>
 </body>
 </html>`;
@@ -123,6 +130,7 @@ export default function TossPaymentModal({
   visible, onClose, clientKey, customerKey, amount, orderId, orderName,
   method = 'CARD', easyPay = null, onSuccess, onFail,
 }) {
+  const insets = useSafeAreaInsets();
   const html = useMemo(
     () => buildHtml({ clientKey, customerKey, amount, orderId, orderName, method, easyPay }),
     [clientKey, customerKey, amount, orderId, orderName, method, easyPay],
@@ -175,7 +183,7 @@ export default function TossPaymentModal({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={styles.safe}>
+      <View style={[styles.safe, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>결제하기</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -199,7 +207,7 @@ export default function TossPaymentModal({
           )}
           style={{ flex: 1 }}
         />
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }

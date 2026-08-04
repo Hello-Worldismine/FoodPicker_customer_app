@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Image, Share,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowLeft, Share2, Heart, MapPin, Store, ChevronDown, ChevronUp,
   AlertTriangle, Clock,
@@ -30,6 +30,7 @@ function pickupLabel(product) {
 export default function ProductDetailScreen({ route, navigation }) {
   const { productId } = route.params;
   const { productList, handleLike } = useApp();
+  const insets = useSafeAreaInsets();
   const product = productList.find(p => p.id === productId);
   const [qty, setQty] = useState(1);
   const [expandedSection, setExpandedSection] = useState(null);
@@ -261,11 +262,11 @@ export default function ProductDetailScreen({ route, navigation }) {
           ))}
         </View>
 
-        <View style={{ height: 120 }} />
+        <View style={{ height: 100 + insets.bottom }} />
       </ScrollView>
 
       {/* 고정 하단 바 */}
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { paddingBottom: Math.max(16, insets.bottom) + 12 }]}>
         {!btnDisabled && (
           <View style={styles.qtyControl}>
             <TouchableOpacity
@@ -542,8 +543,8 @@ const styles = StyleSheet.create({
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: colors.white,
     borderTopWidth: 1, borderTopColor: colors.softGray,
-    padding: 12, flexDirection: 'row', gap: 12, alignItems: 'center',
-    paddingBottom: 24,
+    paddingTop: 12, paddingHorizontal: 12,
+    flexDirection: 'row', gap: 12, alignItems: 'center',
   },
   qtyControl: {
     flexDirection: 'row', alignItems: 'center',

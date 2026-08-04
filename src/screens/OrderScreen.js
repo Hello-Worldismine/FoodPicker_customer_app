@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Alert,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, ShieldCheck, Check, Tag, X, MapPin, CreditCard, Smartphone } from 'lucide-react-native';
@@ -235,7 +235,10 @@ export default function OrderScreen({ navigation, route }) {
           <Text style={styles.sectionLabel}>주문 상품</Text>
           <View style={styles.productRow}>
             <View style={styles.productThumb}>
-              <Text style={styles.productEmoji}>{product.emoji || '🍱'}</Text>
+              {product.image
+                ? <Image source={{ uri: product.image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                : <Text style={styles.productEmoji}>{product.emoji || '🍱'}</Text>
+              }
             </View>
             <View style={styles.productInfo}>
               <Text style={styles.productName}>{product.name}</Text>
