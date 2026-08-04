@@ -78,11 +78,33 @@ function buildHtml({ clientKey, customerKey, amount, orderId, orderName, method,
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { height: 100%; }
-body { background: #fff; }
+html { height: 100%; }
+body { min-height: 100%; background: #fff; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 </style>
 </head>
 <body>
+<script>
+// Android WebView + 키보드: visualViewport 가 줄어든 만큼 body 하단에 패딩을 줘서
+// fixed 포지션 버튼이 키보드 위에 유지되고, 스크롤이 양방향 정상 동작하도록 한다.
+(function() {
+  function applyKeyboardFix() {
+    if (!window.visualViewport) return;
+    window.visualViewport.addEventListener('resize', function() {
+      var keyboardH = Math.max(0, window.innerHeight - window.visualViewport.height);
+      document.body.style.paddingBottom = keyboardH > 0 ? keyboardH + 'px' : '';
+      if (keyboardH > 0) {
+        var el = document.activeElement;
+        if (el) setTimeout(function() { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 150);
+      }
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', applyKeyboardFix);
+  } else {
+    applyKeyboardFix();
+  }
+})();
+</script>
 <script src="https://js.tosspayments.com/v2/standard"></script>
 <script>
 function post(data) {
