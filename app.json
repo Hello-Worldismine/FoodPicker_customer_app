@@ -29,6 +29,7 @@
     "android": {
       "package": "com.foodpicker.userapp",
       "versionCode": 1,
+      "softwareKeyboardLayoutMode": "pan",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",

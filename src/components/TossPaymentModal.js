@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import {
   Modal,
   View,
@@ -7,8 +7,6 @@ import {
   ActivityIndicator,
   StyleSheet,
   Linking,
-  Keyboard,
-  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -126,14 +124,6 @@ export default function TossPaymentModal({
   method = 'CARD', easyPay = null, onSuccess, onFail,
 }) {
   const insets = useSafeAreaInsets();
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  useEffect(() => {
-    if (!visible) { setKeyboardHeight(0); return; }
-    const show = Keyboard.addListener('keyboardDidShow', e => setKeyboardHeight(e.endCoordinates.height));
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
-    return () => { show.remove(); hide.remove(); };
-  }, [visible]);
   const html = useMemo(
     () => buildHtml({ clientKey, customerKey, amount, orderId, orderName, method, easyPay }),
     [clientKey, customerKey, amount, orderId, orderName, method, easyPay],
@@ -208,10 +198,7 @@ export default function TossPaymentModal({
               <ActivityIndicator color={colors.primaryGreen} />
             </View>
           )}
-          style={[
-            { flex: 1 },
-            Platform.OS === 'android' && keyboardHeight > 0 && { marginBottom: keyboardHeight },
-          ]}
+          style={{ flex: 1 }}
         />
       </View>
     </Modal>
