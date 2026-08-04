@@ -51,10 +51,13 @@ export default function OrderCompleteScreen({ navigation, route }) {
             ))}
           </View>
 
-          {/* 픽업 알림 */}
+          {/* 픽업 알림 — 서버(send_pickup_reminders)가 마감 30분 전에 푸시를 보낸다.
+              주문 시점에 이미 30분 미만이면 create_order 가 즉시 1회 안내한다. */}
           <View style={styles.reminderBox}>
             <Text style={styles.reminderText}>
-              📍 픽업 마감 {(order.pickupDeadlineMinutes ?? 60) <= 30 ? '10분' : '30분'} 전에 알림을 보내드릴게요
+              {(order.pickupDeadlineMinutes ?? 60) <= 30
+                ? `⏰ ${order.pickupDeadline} 픽업 마감이 임박했어요. 지금 출발해주세요!`
+                : '📍 픽업 마감 30분 전에 알림을 보내드릴게요'}
             </Text>
           </View>
 

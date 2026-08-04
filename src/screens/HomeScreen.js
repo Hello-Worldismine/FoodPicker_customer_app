@@ -16,6 +16,7 @@ import { useApp } from '../context/AppContext';
 import { mockBannerAds } from '../data/mockData';
 import { fetchActiveBanners, fetchCategories } from '../lib/api';
 import { normalizeCategoryName, withAllCategory } from '../lib/categories';
+import { formatDeadlineClock, formatDeadlineDuration } from '../lib/format';
 
 // 카테고리 아이콘 배경색 — 관리자 웹에는 색 설정이 없으므로 순서대로 순환 적용한다.
 const CAT_BG = ['#E8F5E9', '#FFF8E7', '#FFEBEE', '#F1F8E9', '#FFF3E0', '#E8F5E9', '#FCE4EC', '#E3F2FD'];
@@ -26,11 +27,10 @@ const CAT_ITEM_W = Math.floor((SCREEN_W - 32) / 4);
 const CARD_W = Math.floor(SCREEN_W * 0.44);
 const STORE_CARD_W = Math.floor(SCREEN_W * 0.52);
 
-function fmtDeadline(minutes) {
-  if (!minutes) return '';
-  if (minutes < 60) return `${minutes}분`;
-  if (minutes % 60 === 0) return `${minutes / 60}시간`;
-  return `${Math.floor(minutes / 60)}시간 ${minutes % 60}분`;
+// 픽업 마감 표기 — 마감 시각(정본)이 있으면 '오늘 20:50까지', 없는 구 데이터만 '주문 후 N분 이내'.
+function pickupLabel(product) {
+  if (product.pickupDeadlineAt) return formatDeadlineClock(product.pickupDeadlineAt);
+  return formatDeadlineDuration(product.pickupDeadlineMinutes);
 }
 function fmtTime(iso) {
   const d = new Date(iso);
@@ -90,8 +90,8 @@ function SmallProductCard({ product, onPress, onLike }) {
             </View>
             <View style={styles.footerChip}>
               <Clock size={9} color={colors.warmOrange} />
-              <Text style={[styles.footerText, { color: colors.warmOrange }]}>
-                {fmtDeadline(product.pickupDeadlineMinutes)} 이내
+              <Text style={[styles.footerText, { color: colors.warmOrange }]} numberOfLines={1}>
+                {pickupLabel(product)}
               </Text>
             </View>
             <View style={styles.footerChip}>

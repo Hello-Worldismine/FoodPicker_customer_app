@@ -272,10 +272,13 @@ export async function fetchIdentities() {
 }
 
 /**
- * 표시명 보정.
- * 서버 RPC 들이 표시명을 raw_user_meta_data->>'name' 으로만 읽기 때문에,
- * 소셜 가입자(name 없음)는 주문/리뷰에서 '구매자' 로 표시된다.
- * 소셜 제공자가 준 full_name/nickname 등으로 name 을 한 번 채워준다.
+ * 실명(name) 보정.
+ * 주문/리뷰의 표시명은 raw_user_meta_data->>'nickname' 이 정본이고(사용자가 온보딩에서 직접 정한다),
+ * 닉네임이 없는 계정만 서버가 name 을 마스킹('정**')해 폴백한다.
+ * 여기서는 그 폴백용 name 만 소셜 제공자 값으로 한 번 채운다.
+ *
+ * ⚠️ nickname 에는 절대 자동 대입하지 않는다 — 카카오/구글의 full_name 은 실명이라
+ *    그대로 확정되면 판매자에게 실명이 전체 노출된다(닉네임은 전체 표시가 원칙).
  */
 export async function ensureUserName() {
   const { data, error } = await supabase.auth.getUser();
@@ -291,6 +294,7 @@ export async function ensureUserName() {
   const name = (candidate ?? fallback).trim();
   if (!name) return null;
 
+  // data 에 name 만 넣는다(nickname 자동 대입 금지 — 위 주석 참조).
   const { error: updateError } = await supabase.auth.updateUser({ data: { name } });
   if (updateError) {
     console.warn('[oauth] 표시명 저장 실패:', updateError.message);

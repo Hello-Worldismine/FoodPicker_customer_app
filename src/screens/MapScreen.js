@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, Navigation2, X, ChevronRight, Percent, Clock } from 'lucide-react-native';
@@ -26,6 +26,21 @@ export default function MapScreen({ navigation }) {
   const [selectedStore, setSelectedStore] = useState(null);
   const [locating, setLocating] = useState(false);
   const [center, setCenter] = useState(DEFAULT_LOCATION);
+  // 내 위치는 이 화면 로컬 state 로만 관리한다(전역 컨텍스트에 의존하지 않음).
+  const [myLoc, setMyLoc] = useState(null);
+
+  // 진입 시 1회 현재 위치를 잡아 지도 중심과 '내 위치' 도트에 반영한다.
+  // (예전에는 항상 DEFAULT_LOCATION(강남역) 고정이라, 다른 지역 매장은 좌표가 있어도 화면 밖이었다)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const coords = await getCurrentCoords();
+      if (!alive || !coords) return;   // 권한 거부·실패 시 DEFAULT_LOCATION 유지
+      setMyLoc(coords);
+      setCenter(coords);
+    })();
+    return () => { alive = false; };
+  }, []);
 
   async function handleMyLocation() {
     if (locating) return;
@@ -33,7 +48,11 @@ export default function MapScreen({ navigation }) {
     const coords = await getCurrentCoords();
     if (coords) {
       await updateLocation(coords);
+      setMyLoc(coords);
       setCenter(coords);
+    } else {
+      // 예전에는 버튼만 눌리고 아무 일도 일어나지 않아 원인을 알 수 없었다.
+      Alert.alert('위치 권한 필요', '현재 위치를 사용하려면 위치 권한을 허용해주세요.');
     }
     setLocating(false);
   }
@@ -68,6 +87,8 @@ export default function MapScreen({ navigation }) {
   // lat/lng가 있는 매장만 지도에 표시
   const mapStores = filteredStores.filter(s => s.lat != null && s.lng != null);
   const markers = mapStores.map(s => ({ lat: s.lat, lng: s.lng, title: s.name, status: s.status }));
+  // 조건에는 맞지만 좌표가 없어 지도에서 빠진 매장 수 — 빈 지도의 원인 안내에 쓴다.
+  const noCoordCount = filteredStores.length - mapStores.length;
 
   const sellingProducts = selectedStore
     ? productList.filter(p => p.storeId === selectedStore.id && p.status === 'selling' && p.stock > 0)
@@ -130,9 +151,15 @@ export default function MapScreen({ navigation }) {
           {[
             { color: colors.primaryGreen, label: '판매중' },
             { color: colors.warmOrange,   label: '마감임박' },
+            // 마커 쪽은 '흰 배경 + 회색 테두리' 아웃라인 칩이라 범례 점도 같은 모양으로 맞춘다.
+            { color: colors.white, border: '#D1D5DB', label: '상품 없음' },
           ].map(l => (
             <View key={l.label} style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: l.color }]} />
+              <View style={[
+                styles.legendDot,
+                { backgroundColor: l.color },
+                l.border && { borderWidth: 1.5, borderColor: l.border },
+              ]} />
               <Text style={styles.legendText}>{l.label}</Text>
             </View>
           ))}
@@ -146,6 +173,7 @@ export default function MapScreen({ navigation }) {
           lng={center.lng}
           zoom={14}
           markers={markers}
+          myLocation={myLoc}
           interactive
           style={{ flex: 1 }}
           onMarkerPress={idx => {
@@ -154,6 +182,17 @@ export default function MapScreen({ navigation }) {
           }}
           onMapPress={() => setSelectedStore(null)}
         />
+
+        {/* 핀이 하나도 없을 때 원인 안내 — 예전에는 아무 설명 없이 빈 지도만 보였다 */}
+        {markers.length === 0 && (
+          <View style={styles.emptyBanner} pointerEvents="none">
+            <Text style={styles.emptyBannerText}>
+              {filteredStores.length === 0
+                ? '조건에 맞는 매장이 없습니다'
+                : `주변 매장 ${noCoordCount}곳의 위치가 아직 등록되지 않았습니다`}
+            </Text>
+          </View>
+        )}
 
         {/* 현재 위치 버튼 */}
         <TouchableOpacity
@@ -276,10 +315,17 @@ const styles = StyleSheet.create({
   filterChipText: { fontSize: 12, fontWeight: '600', color: colors.charcoalBlack },
   filterChipTextActive: { color: colors.white },
 
-  legendGroup: { flexDirection: 'row', gap: 10, marginLeft: 'auto' },
+  legendGroup: { flexDirection: 'row', gap: 8, marginLeft: 'auto', flexShrink: 1 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 11, color: colors.mediumGray },
+
+  emptyBanner: {
+    position: 'absolute', top: 12, left: 16, right: 16,
+    backgroundColor: 'rgba(31,41,51,0.82)', borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 10, zIndex: 20,
+  },
+  emptyBannerText: { fontSize: 12, fontWeight: '600', color: colors.white, textAlign: 'center' },
 
   locationBtn: {
     position: 'absolute', right: 16,

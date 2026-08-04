@@ -10,6 +10,7 @@ import {
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 import { fetchPriceHistory } from '../lib/api';
+import { formatDeadlineClock, formatDeadlineDuration, minutesUntilDeadline } from '../lib/format';
 import { openInMaps } from '../lib/maps';
 import NaverMap from '../components/NaverMap';
 
@@ -18,11 +19,10 @@ function formatDate(iso) {
   return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
-function fmtDeadline(minutes) {
-  if (!minutes) return '';
-  if (minutes < 60) return `주문 후 ${minutes}분 이내`;
-  if (minutes % 60 === 0) return `주문 후 ${minutes / 60}시간 이내`;
-  return `주문 후 ${Math.floor(minutes / 60)}시간 ${minutes % 60}분 이내`;
+// 픽업 마감 표기 — 마감 시각(정본)이 있으면 '오늘 20:50까지', 없는 구 데이터만 '주문 후 N분 이내'.
+function pickupLabel(product) {
+  if (product.pickupDeadlineAt) return formatDeadlineClock(product.pickupDeadlineAt);
+  return formatDeadlineDuration(product.pickupDeadlineMinutes);
 }
 
 // TODO: 상품 상세를 GET /api/products/:productId 로 교체하세요.
@@ -48,10 +48,17 @@ export default function ProductDetailScreen({ route, navigation }) {
   const isSoldout = product.status === 'soldout' || product.stock === 0;
   const unavailable = isExpired || isSoldout;
 
+  // 픽업 마감 — 시각(정본) 기준. 30분 이내면 임박 강조, 이미 지났으면 주문 불가(create_order 도 거부한다).
+  const deadlineLabel = pickupLabel(product);
+  const minutesLeft = minutesUntilDeadline(product.pickupDeadlineAt);
+  const deadlineSoon = minutesLeft != null && minutesLeft >= 0 && minutesLeft <= 30;
+  const deadlinePassed = minutesLeft != null && minutesLeft < 0;
+
   let btnLabel = `${(product.salePrice * qty).toLocaleString()}원 예약하기`;
   let btnDisabled = false;
   if (isSoldout) { btnLabel = '품절된 상품입니다'; btnDisabled = true; }
   if (isExpired) { btnLabel = '판매가 종료되었습니다'; btnDisabled = true; }
+  if (deadlinePassed) { btnLabel = '픽업 마감된 상품입니다'; btnDisabled = true; }
 
   function handleShare() {
     const msg = [
@@ -68,7 +75,11 @@ export default function ProductDetailScreen({ route, navigation }) {
     { key: 'allergy',     label: '알레르기 정보', content: product.allergyInfo },
     { key: 'storage',     label: '보관 방법',   content: product.storageMethod },
     { key: 'expiry',      label: '소비기한',    content: formatDate(product.expiryDate) },
-    { key: 'pickupDeadline', label: '픽업 마감', content: fmtDeadline(product.pickupDeadlineMinutes) },
+    {
+      key: 'pickupDeadline',
+      label: '픽업 마감',
+      content: deadlineSoon ? `${deadlineLabel} · 픽업 마감 임박` : deadlineLabel,
+    },
     { key: 'cancel',      label: '취소/환불 규정', content: product.cancelPolicy },
     ...(product.storeNotice ? [{ key: 'notice', label: '매장 공지', content: product.storeNotice }] : []),
   ];
@@ -159,13 +170,21 @@ export default function ProductDetailScreen({ route, navigation }) {
           <View style={styles.infoGrid}>
             {[
               { label: '남은 수량',      value: isSoldout ? '품절' : `${product.stock}개`, warn: isSoldout },
-              { label: '픽업 마감', value: fmtDeadline(product.pickupDeadlineMinutes) },
+              // 마감 임박(30분 이내)은 주황, 이미 지났으면 빨강으로 강조.
+              {
+                label: deadlineSoon ? '픽업 마감 임박' : '픽업 마감',
+                value: deadlinePassed ? `${deadlineLabel} (마감)` : deadlineLabel,
+                warn: deadlineSoon || deadlinePassed,
+                color: deadlinePassed ? colors.alertRed : colors.warmOrange,
+              },
               { label: '소비기한',       value: formatDate(product.expiryDate), warn: isExpired },
               { label: '보관 방법',      value: product.storage },
             ].map(item => (
               <View key={item.label} style={styles.infoGridItem}>
                 <Text style={styles.infoGridLabel}>{item.label}</Text>
-                <Text style={[styles.infoGridValue, item.warn && { color: colors.alertRed }]}>{item.value}</Text>
+                <Text style={[styles.infoGridValue, item.warn && { color: item.color || colors.alertRed }]}>
+                  {item.value}
+                </Text>
               </View>
             ))}
           </View>

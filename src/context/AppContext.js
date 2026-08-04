@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import * as api from '../lib/api';
 import { registerForPushNotifications } from '../lib/push';
+import { subscribeBuyerRealtime } from '../lib/realtime';
 
 // 소비자 앱 전역 상태 — Supabase 실데이터. 세션(구매자) 기준으로 로드/초기화.
 const AppContext = createContext(null);
@@ -18,6 +19,18 @@ export function AppProvider({ children }) {
   const [notifications, setNotifications] = useState([]);
   const [currentAddressId, setCurrentAddressId] = useState(null);
   const [loading, setLoading] = useState(true);
+  // 화면 상단 안내 배너(OrderStatusToast) — { key, message, tone } | null
+  const [toast, setToast] = useState(null);
+
+  // Realtime 콜백에서 '직전 주문 상태'를 참조하기 위한 ref(상태 전이 판정용).
+  const ordersRef = useRef([]);
+  useEffect(() => { ordersRef.current = orders; }, [orders]);
+
+  const showToast = useCallback((message, tone = 'info') => {
+    if (!message) return;
+    setToast({ key: `${Date.now()}-${Math.random()}`, message, tone });
+  }, []);
+  const hideToast = useCallback(() => { setToast(null); }, []);
 
   const reloadCatalog = useCallback(async () => {
     const { products, stores } = await api.loadCatalog();
@@ -66,9 +79,45 @@ export function AppProvider({ children }) {
       registerForPushNotifications().catch(() => {}); // 실기기 EAS 빌드에서만 실제 등록
     } else {
       setProductList([]); setStores([]); setOrders([]); setCoupons([]); setUsedCoupons([]);
-      setPriceAlerts([]); setAddresses([]); setNotifications([]); setCurrentAddressId(null); setLoading(false);
+      setPriceAlerts([]); setAddresses([]); setNotifications([]); setCurrentAddressId(null);
+      setToast(null); setLoading(false);
     }
   }, [user, loadAll]);
+
+  // ── 실시간 반영(구매자 전용 Realtime) ──
+  // 판매자가 QR 스캔으로 픽업완료 처리하면 orders.seller_status 가 서버에서 바뀐다.
+  // 사용자 액션이 없으므로 구독 없이는 앱에 도달할 경로가 없다 → 여기서 구독한다.
+  useEffect(() => {
+    if (!user) return undefined;
+    const unsubscribe = subscribeBuyerRealtime(user.id, {
+      onOrderUpdate: (payload) => {
+        const row = (payload && payload.new) || {};
+        // ⚠️ payload.old 는 REPLICA IDENTITY 가 FULL 이 아니면 비어 있다.
+        //    → 직전 로컬 상태(order_code 기준)의 sellerStatus 와 비교해 전이를 판정한다.
+        const prev = ordersRef.current.find(o => o.id === row.order_code);
+        const before = prev ? prev.sellerStatus : null;
+        const beforeReq = prev ? prev.cancelRequestStatus : null;
+        if (row.seller_status === 'completed' && before !== 'completed') {
+          showToast('픽업이 완료되었습니다', 'success');
+        } else if (row.seller_status === 'cancelled' && before !== 'cancelled') {
+          // 취소는 판매자가 확정한다 — 본인이 요청했더라도 '승인' 결과는 반드시 알려야 한다.
+          if (row.cancel_request_status === 'approved') {
+            showToast('취소 승인 · 전액 환불되었습니다', 'success');
+          } else {
+            showToast('주문이 취소되었습니다', 'warn');
+          }
+        } else if (row.cancel_request_status === 'rejected' && beforeReq === 'requested') {
+          showToast('취소 요청이 거절되었습니다', 'warn');
+        }
+        // 주문만 다시 읽는다(카탈로그는 호출 비용이 커 여기서 갱신하지 않는다).
+        reloadOrders().catch(e => console.warn('[realtime] 주문 재조회 실패:', e.message));
+      },
+      onNotificationInsert: () => {
+        reloadNotifications().catch(e => console.warn('[realtime] 알림 재조회 실패:', e.message));
+      },
+    });
+    return unsubscribe;
+  }, [user, reloadOrders, reloadNotifications, showToast]);
 
   const likedStores = stores.filter(s => s.liked).map(s => s.id);
   const currentAddress = addresses.find(a => a.id === currentAddressId) || addresses[0] || null;
@@ -116,9 +165,12 @@ export function AppProvider({ children }) {
     await Promise.all([reloadOrders(), reloadCatalog(), reloadCoupons()]);
     return order;
   }
-  async function handleCancelOrder(orderCode) {
-    await api.cancelOrder(orderCode); // 실패 시 throw
-    await Promise.all([reloadOrders(), reloadCatalog()]);
+  // 주문 취소 '요청'. 실제 취소/환불은 판매자가 승인한 시점에 확정된다.
+  // 재고·쿠폰도 승인 시점에 복구되므로 여기서는 주문 목록만 다시 읽는다.
+  async function handleRequestCancelOrder(orderCode, reason = null) {
+    await api.requestOrderCancel(orderCode, reason); // 실패 시 throw
+    await reloadOrders();
+    showToast('취소 요청이 접수되었습니다 · 판매자 승인을 기다려주세요', 'info');
   }
   // 하위호환: 일부 화면이 handleOrderComplete(order) 호출 → 서버 재로딩으로 대체
   function handleOrderComplete() { reloadOrders(); reloadCatalog(); }
@@ -179,7 +231,7 @@ export function AppProvider({ children }) {
       handleUpdateAddress,
       handleDeleteAddress,
       handleOrderComplete,
-      handleCancelOrder,
+      handleRequestCancelOrder,
       placeOrder,
       submitReview,
       redeemCoupon,
@@ -187,6 +239,10 @@ export function AppProvider({ children }) {
       removePriceAlert,
       markNotificationRead,
       updateLocation,
+      toast,
+      showToast,
+      hideToast,
+      reloadOrders,
       reload: loadAll,
       fetchProductReviews: api.fetchProductReviews,
       fetchStoreReviews: api.fetchStoreReviews,

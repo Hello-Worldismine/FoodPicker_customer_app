@@ -2,12 +2,12 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Heart, Clock, Bell } from 'lucide-react-native';
 import { colors } from '../theme';
+import { formatDeadlineClock, formatDeadlineDuration } from '../lib/format';
 
-function fmtDeadline(minutes) {
-  if (!minutes) return '';
-  if (minutes < 60) return `${minutes}분 이내`;
-  if (minutes % 60 === 0) return `${minutes / 60}시간 이내`;
-  return `${Math.floor(minutes / 60)}시간 ${minutes % 60}분 이내`;
+// 픽업 마감 표기 — 마감 시각(정본)이 있으면 '오늘 20:50까지', 없는 구 데이터만 '주문 후 N분 이내'.
+function pickupLabel(product) {
+  if (product.pickupDeadlineAt) return formatDeadlineClock(product.pickupDeadlineAt);
+  return formatDeadlineDuration(product.pickupDeadlineMinutes);
 }
 
 export default function ProductCard({
@@ -92,8 +92,8 @@ export default function ProductCard({
             <Text style={styles.stockText}>남은 수량 {product.stock}개</Text>
             <View style={styles.pickupRow}>
               <Clock size={11} color={colors.warmOrange} />
-              <Text style={styles.pickupText}>
-                주문 후 {fmtDeadline(product.pickupDeadlineMinutes)}
+              <Text style={styles.pickupText} numberOfLines={1}>
+                {pickupLabel(product)}
               </Text>
             </View>
           </View>

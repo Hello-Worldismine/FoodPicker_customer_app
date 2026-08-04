@@ -1,5 +1,8 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert,
+  Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ClipboardList, Ticket, Heart, CreditCard, Bell, HelpCircle, FileText,
@@ -8,6 +11,7 @@ import {
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
+import * as api from '../lib/api';
 import { deleteMyAccount } from '../lib/api';
 
 // TODO: GET /api/users/me/stats 로 교체 (환경 기여 통계)
@@ -20,8 +24,34 @@ const ENV_STATS = [
 export default function MyPageScreen({ navigation }) {
   const { orders, coupons, likedStores } = useApp();
   const { user, signOut } = useAuth();
-  const displayName = user?.user_metadata?.name || '고객';
+  // 표시명은 닉네임이 정본이다(판매자에게 보이는 이름). 미설정 계정만 name 으로 폴백.
+  const nickname = user?.user_metadata?.nickname || '';
+  const displayName = nickname || user?.user_metadata?.name || '고객';
   const displayEmail = user?.email || '';
+
+  // 닉네임 수정 모달
+  const [editVisible, setEditVisible] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState('');
+  const [saving, setSaving] = useState(false);
+  const check = api.validateNickname(nicknameInput);
+
+  function openEdit() {
+    setNicknameInput(nickname);
+    setEditVisible(true);
+  }
+  async function saveNickname() {
+    if (saving || !check.ok) return;
+    setSaving(true);
+    try {
+      // 저장되면 USER_UPDATED 로 세션이 갱신돼 화면이 자동 리렌더된다(로컬 상태 동기화 불필요).
+      await api.setMyNickname(nicknameInput);
+      setEditVisible(false);
+    } catch (e) {
+      Alert.alert('닉네임 변경 실패', e.message || '잠시 후 다시 시도해주세요.');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function confirmLogout() {
     Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
@@ -80,6 +110,9 @@ export default function MyPageScreen({ navigation }) {
               <Text style={styles.userName}>{displayName}</Text>
               <Text style={styles.userEmail}>{displayEmail}</Text>
             </View>
+            <TouchableOpacity style={styles.editBtn} onPress={openEdit}>
+              <Text style={styles.editBtnText}>수정</Text>
+            </TouchableOpacity>
           </View>
 
           {/* 환경 기여 통계 */}
@@ -130,6 +163,48 @@ export default function MyPageScreen({ navigation }) {
 
         <Text style={styles.versionText}>푸드피커 v1.0.0</Text>
       </ScrollView>
+
+      {/* 닉네임 수정 모달 — 진행 중 주문의 표시명도 함께 갱신된다(sync_my_display_name) */}
+      <Modal visible={editVisible} transparent animationType="slide" onRequestClose={() => setEditVisible(false)}>
+        <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => setEditVisible(false)} />
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>닉네임 수정</Text>
+            <Text style={styles.sheetSub}>주문하면 판매자에게 이 이름이 보여요.</Text>
+            <TextInput
+              style={styles.sheetInput}
+              value={nicknameInput}
+              onChangeText={setNicknameInput}
+              placeholder="판매자에게 보여질 이름"
+              placeholderTextColor={colors.mediumGray}
+              maxLength={api.NICKNAME_MAX}
+              autoCorrect={false}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={saveNickname}
+            />
+            <Text style={[styles.sheetHelp, nicknameInput.trim() && !check.ok && { color: colors.alertRed }]}>
+              {nicknameInput.trim() && !check.ok
+                ? check.message
+                : `${api.NICKNAME_MIN}~${api.NICKNAME_MAX}자 · 실명은 판매자에게 공개되지 않습니다.`}
+            </Text>
+            <View style={styles.sheetBtns}>
+              <TouchableOpacity style={styles.sheetCancel} onPress={() => setEditVisible(false)} disabled={saving}>
+                <Text style={styles.sheetCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.sheetSave, (!check.ok || saving) && { opacity: 0.6 }]}
+                onPress={saveNickname}
+                disabled={!check.ok || saving}
+              >
+                {saving
+                  ? <ActivityIndicator color={colors.white} />
+                  : <Text style={styles.sheetSaveText}>저장</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -168,4 +243,27 @@ const styles = StyleSheet.create({
   menuBadgeText: { fontSize: 11, fontWeight: '700', color: colors.white },
   menuBadgeTextCoupon: { color: colors.primaryGreen },
   versionText: { fontSize: 12, color: colors.mediumGray, textAlign: 'center', marginTop: 8 },
+
+  modalRoot: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+  sheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, paddingBottom: 32,
+  },
+  sheetTitle: { fontSize: 18, fontWeight: '800', color: colors.charcoalBlack, marginBottom: 6 },
+  sheetSub: { fontSize: 13, color: colors.mediumGray, marginBottom: 18 },
+  sheetInput: {
+    backgroundColor: colors.softGray, borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 14,
+    fontSize: 15, color: colors.charcoalBlack,
+  },
+  sheetHelp: { fontSize: 12, color: colors.mediumGray, marginTop: 8, marginBottom: 20, lineHeight: 18 },
+  sheetBtns: { flexDirection: 'row', gap: 10 },
+  sheetCancel: { flex: 1, backgroundColor: colors.softGray, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  sheetCancelText: { fontSize: 15, fontWeight: '700', color: colors.charcoalBlack },
+  sheetSave: {
+    flex: 1, backgroundColor: colors.primaryGreen, borderRadius: 12,
+    paddingVertical: 14, alignItems: 'center', justifyContent: 'center',
+  },
+  sheetSaveText: { fontSize: 15, fontWeight: '700', color: colors.white },
 });
