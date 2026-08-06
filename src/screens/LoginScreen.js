@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView,
-  Platform, Alert, ActivityIndicator, ScrollView, StyleSheet,
+  Platform, Alert, ActivityIndicator, ScrollView, StyleSheet, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
@@ -58,7 +58,7 @@ export default function LoginScreen({ navigation }) {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 28, paddingTop: insets.top + 40 }} keyboardShouldPersistTaps="handled">
           <View style={{ alignItems: 'center', marginBottom: 36 }}>
-            <Text style={{ fontSize: 40 }}>🥗</Text>
+            <Image source={require('../../assets/icon_consumer.png')} style={{ width: 80, height: 80, resizeMode: 'contain' }} />
             <Text style={{ fontSize: 28, fontWeight: '800', color: colors.primaryGreen, marginTop: 8 }}>푸드피커</Text>
             <Text style={{ fontSize: 14, color: colors.mediumGray, marginTop: 4 }}>버려질 음식을 구하고, 합리적으로 픽업하세요</Text>
           </View>
