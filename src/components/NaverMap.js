@@ -93,7 +93,12 @@ function buildHtml({ lat, lng, zoom, markers, interactive }) {
         naver.maps.Event.addListener(map, 'click', function(){ if (!markerJustClicked) post('tap'); });
         MARKERS.forEach(function(m, i) {
           var style = STATUS_STYLE[m.status] || STATUS_STYLE.selling;
-          var label = (m.title || '').split(' ')[0] || '';
+          // 매장명 전체를 라벨로 쓴다(수정사항 시트 사용자앱 10행 '지도에 상점 이름 표시').
+          // 이전에는 split(' ')[0] 으로 첫 어절만 잘라 써서 '테스트매장 신설동점' 이
+          // '테스트매장' 으로, '그린샐러드 강남점' 이 '그린샐러드' 로 보였다 — 지점 구분이 불가능했다.
+          // 다만 마커는 지도 위 칩이라 너무 길면 서로 겹치므로 12자에서 말줄임한다.
+          var raw = (m.title || '').replace(/\\s+/g, ' ').trim();
+          var label = raw.length > 12 ? raw.slice(0, 12) + '…' : raw;
           new naver.maps.Marker({
             position: new naver.maps.LatLng(m.lat, m.lng),
             map: map,
