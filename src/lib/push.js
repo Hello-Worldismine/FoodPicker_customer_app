@@ -7,9 +7,12 @@ import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
 // 앱 포그라운드에서도 알림 배너 표시.
+// expo-notifications 0.32 부터 shouldShowAlert 는 deprecated 이고 shouldShowBanner 가 필수 필드다.
+// shouldShowBanner/shouldShowList 를 주지 않으면 앱을 켜둔 상태에서 배너가 아예 뜨지 않는다.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true, // 상단 배너
+    shouldShowList: true,   // 알림 센터 목록
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
