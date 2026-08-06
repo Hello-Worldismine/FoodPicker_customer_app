@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { QrCode, Clock, MapPin, Star, Navigation } from 'lucide-react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { colors } from '../theme';
+import NaverMap from '../components/NaverMap';
 import { useApp } from '../context/AppContext';
 import { openDirections, openInMaps } from '../lib/maps';
 import { CANCEL_REQUEST_WINDOW_MS } from '../lib/api';
@@ -35,7 +36,9 @@ function remainLabel(ms) {
 // 주문 상태 변경(판매자 픽업완료 등)은 AppContext 의 Realtime 구독이 즉시 반영한다.
 // 아래 useFocusEffect 는 Realtime 이 끊긴 경우(백그라운드 복귀 등)를 위한 폴백이다.
 export default function OrderHistoryScreen({ navigation, route }) {
-  const { orders, handleRequestCancelOrder, reloadOrders } = useApp();
+  // stores 는 픽업 매장 지도의 좌표 출처다. orders 에는 좌표 컬럼이 없고
+  // store_address 스냅샷만 있어서 order.storeId 로 매장 목록에서 찾아 쓴다.
+  const { orders, stores, handleRequestCancelOrder, reloadOrders } = useApp();
   const [tab, setTab] = useState(route?.params?.initialTab ?? 'pending');
 
   useEffect(() => {
@@ -210,21 +213,54 @@ export default function OrderHistoryScreen({ navigation, route }) {
                     </TouchableOpacity>
                   </View>
 
-                  {/* 지도 (탭하면 외부 지도앱에서 매장 위치 표시) */}
-                  <TouchableOpacity
-                    style={styles.mapPlaceholder}
-                    activeOpacity={0.85}
-                    onPress={() => openInMaps({ address: order.storeAddress, label: order.store })}
-                  >
-                    <MapGrid />
-                    <View style={styles.mapPinWrap}>
-                      <View style={styles.mapPinCircle}>
-                        <MapPin size={20} color={colors.white} fill={colors.primaryGreen} />
-                      </View>
-                      <View style={styles.mapPinShadow} />
-                    </View>
-                    <Text style={styles.mapLabel}>탭하여 지도 보기</Text>
-                  </TouchableOpacity>
+                  {/* 픽업 매장 지도.
+                      이전에는 MapGrid(선을 그어 만든 가짜 격자) 위에 핀 모양만 얹은 '지도처럼 보이는
+                      그림'이었다 — 실제 지도가 아니었다(수정사항 시트 사용자앱 20행).
+                      orders 에는 좌표 컬럼이 없고 store_address 스냅샷만 있으므로,
+                      order.storeId 로 매장 목록에서 좌표를 찾아 실제 지도를 그린다.
+                      좌표를 못 찾으면(매장 좌표 미등록 등) 기존처럼 탭하여 외부 지도앱으로 보낸다. */}
+                  {(() => {
+                    const s = order.storeId ? stores.find(v => v.id === order.storeId) : null;
+                    const hasCoords = s && s.lat != null && s.lng != null;
+                    if (hasCoords) {
+                      return (
+                        <TouchableOpacity
+                          style={styles.mapPlaceholder}
+                          activeOpacity={0.9}
+                          onPress={() => openInMaps({ address: order.storeAddress, label: order.store })}
+                        >
+                          <NaverMap
+                            lat={s.lat}
+                            lng={s.lng}
+                            zoom={16}
+                            interactive={false}
+                            markers={[{ lat: s.lat, lng: s.lng, title: order.store, status: 'selling' }]}
+                            style={StyleSheet.absoluteFill}
+                          />
+                          {/* 지도는 탭을 가로채지 않게 비대화형으로 두고, 탭은 바깥 버튼이 받는다 */}
+                          <View style={styles.mapTapHint} pointerEvents="none">
+                            <Text style={styles.mapTapHintText}>탭하여 지도앱에서 열기</Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    }
+                    return (
+                      <TouchableOpacity
+                        style={styles.mapPlaceholder}
+                        activeOpacity={0.85}
+                        onPress={() => openInMaps({ address: order.storeAddress, label: order.store })}
+                      >
+                        <MapGrid />
+                        <View style={styles.mapPinWrap}>
+                          <View style={styles.mapPinCircle}>
+                            <MapPin size={20} color={colors.white} fill={colors.primaryGreen} />
+                          </View>
+                          <View style={styles.mapPinShadow} />
+                        </View>
+                        <Text style={styles.mapLabel}>탭하여 지도 보기</Text>
+                      </TouchableOpacity>
+                    );
+                  })()}
 
                   {/* QR + 취소 요청 버튼(10분 창 안에서만 노출) */}
                   <View style={styles.actionRow}>
@@ -399,6 +435,13 @@ const styles = StyleSheet.create({
     width: 12, height: 4, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.15)',
   },
   mapLabel: { fontSize: 12, color: '#5A7A5A', fontWeight: '600', marginTop: 8 },
+  // 실제 지도 위에 얹는 안내 배지(지도 타일을 가리지 않게 하단에 작게).
+  mapTapHint: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    paddingVertical: 5, alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  mapTapHintText: { fontSize: 11, color: colors.white, fontWeight: '600' },
 
   noticeBox: { backgroundColor: '#FEF3C7', borderRadius: 10, padding: 12, marginBottom: 12 },
   noticeTitle: { fontSize: 13, fontWeight: '800', color: '#B45309', marginBottom: 4 },
