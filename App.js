@@ -86,7 +86,7 @@ function usePushNotificationNavigation() {
 
 // 세션 유무 → 프로필(닉네임) 설정 여부 순으로 화면을 분기
 function Gate() {
-  const { session, user, loading } = useAuth();
+  const { session, user, loading, recovering } = useAuth();
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: '#22A06B', alignItems: 'center', justifyContent: 'center' }}>
@@ -94,6 +94,11 @@ function Gate() {
       </View>
     );
   }
+  // ★★ 비밀번호 재설정 중에는 세션이 생겨도 AuthNavigator 를 유지한다.
+  // verifyOtp 가 성공하면 복구 세션이 생기는데, 이 가드가 없으면 아래 분기가 곧바로
+  // ProfileSetupScreen/AppNavigator 로 넘어가 '새 비밀번호 입력' 화면이 사라진다.
+  // recovering 은 SIGNED_OUT 또는 화면 언마운트 시 반드시 false 로 돌아온다(AuthContext 참조).
+  if (recovering) return <AuthNavigator />;
   if (!session) return <AuthNavigator />;
   // 닉네임 미설정(최초 로그인/기존 회원)이면 온보딩으로 유도.
   // 판정 근거가 세션 메타데이터라 추가 로딩이 필요 없고, 저장 시 USER_UPDATED 로 자동 통과된다.

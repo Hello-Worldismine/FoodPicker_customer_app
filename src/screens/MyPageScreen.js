@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert,
   Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -6,7 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ClipboardList, Ticket, Heart, CreditCard, Bell, HelpCircle, FileText,
-  LogOut, UserX, ChevronRight, User, Link2,
+  LogOut, UserX, ChevronRight, User, Link2, KeyRound, Smartphone,
 } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
@@ -53,6 +53,62 @@ export default function MyPageScreen({ navigation }) {
     }
   }
 
+  // 휴대폰 번호(아이디 찾기 본인확인용) — 기존 회원도 여기서 등록/변경할 수 있어야
+  // '이름+휴대폰으로 아이디 찾기'가 신규 가입자에게만 동작하는 반쪽 기능이 되지 않는다.
+  const [phone, setPhone] = useState(null);        // 정규화된 숫자열 또는 null(미등록)
+  const [phoneVisible, setPhoneVisible] = useState(false);
+  const [phoneInput, setPhoneInput] = useState('');
+  const [phoneSaving, setPhoneSaving] = useState(false);
+  const phoneCheck = api.validatePhone(phoneInput);
+
+  useEffect(() => {
+    let alive = true;
+    api.fetchMyPhone()
+      .then(p => { if (alive) setPhone(p); })
+      .catch(e => console.warn('[마이페이지] 휴대폰 조회 실패:', e.message));
+    return () => { alive = false; };
+  }, []);
+
+  function openPhoneEdit() {
+    setPhoneInput(phone ? api.formatPhone(phone) : '');
+    setPhoneVisible(true);
+  }
+  async function savePhone() {
+    if (phoneSaving || !phoneCheck.ok) return;
+    setPhoneSaving(true);
+    try {
+      const saved = await api.setMyPhone(phoneInput);
+      setPhone(saved || phoneCheck.value);
+      setPhoneVisible(false);
+    } catch (e) {
+      Alert.alert('휴대폰 저장 실패', e.message || '잠시 후 다시 시도해주세요.');
+    } finally {
+      setPhoneSaving(false);
+    }
+  }
+  function confirmClearPhone() {
+    Alert.alert(
+      '휴대폰 번호 삭제',
+      '삭제하면 이름+휴대폰으로 아이디(이메일)를 찾을 수 없게 됩니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.clearMyPhone();
+              setPhone(null);
+              setPhoneVisible(false);
+            } catch (e) {
+              Alert.alert('삭제 실패', e.message || '잠시 후 다시 시도해주세요.');
+            }
+          },
+        },
+      ],
+    );
+  }
+
   function confirmLogout() {
     Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
       { text: '취소', style: 'cancel' },
@@ -89,6 +145,8 @@ export default function MyPageScreen({ navigation }) {
     { key: 'coupons',     Icon: Ticket,        label: '쿠폰함',               onPress: () => navigation.navigate('Coupons'),      badge: coupons.length > 0 ? `${coupons.length}장` : null },
     { key: 'likedStores', Icon: Heart,         label: '관심 매장',             onPress: () => navigation.navigate('LikedStores'),  badge: likedStores.length > 0 ? `${likedStores.length}개` : null },
     { key: 'payment',  Icon: CreditCard,    label: '결제수단 관리',         onPress: () => navigation.navigate('PaymentMethod') },
+    { key: 'phone',    Icon: Smartphone,    label: '휴대폰 번호',           onPress: openPhoneEdit, badge: phone ? api.formatPhone(phone) : '미등록' },
+    { key: 'password', Icon: KeyRound,      label: '비밀번호 변경',         onPress: () => navigation.navigate('ChangePassword') },
     { key: 'linked',   Icon: Link2,         label: '연결된 계정 관리',       onPress: () => navigation.navigate('LinkedAccounts') },
     { key: 'notif',    Icon: Bell,          label: '알림 설정',             onPress: () => navigation.navigate('NotificationSettings') },
     { key: 'support',  Icon: HelpCircle,    label: '고객센터',              onPress: () => navigation.navigate('Support') },
@@ -131,14 +189,17 @@ export default function MyPageScreen({ navigation }) {
         <View style={styles.menuList}>
           {menuItems.map((item, idx) => {
             const Icon = item.Icon;
+            // 채운 초록 배지는 '처리할 일이 있다'는 신호라서 개수 항목에만 쓴다.
+            // 쿠폰/관심매장/휴대폰처럼 단순 정보는 테두리만 있는 연한 배지로 구분한다.
+            const softBadge = item.key === 'coupons' || item.key === 'likedStores' || item.key === 'phone';
             return (
               <TouchableOpacity key={item.key} onPress={item.onPress}
                 style={[styles.menuItem, idx < menuItems.length - 1 && styles.menuItemBorder]}>
                 <Icon size={18} color={colors.charcoalBlack} />
                 <Text style={styles.menuLabel}>{item.label}</Text>
                 {item.badge != null && (
-                  <View style={[styles.menuBadge, (item.key === 'coupons' || item.key === 'likedStores') && styles.menuBadgeCoupon]}>
-                    <Text style={[styles.menuBadgeText, (item.key === 'coupons' || item.key === 'likedStores') && styles.menuBadgeTextCoupon]}>
+                  <View style={[styles.menuBadge, softBadge && styles.menuBadgeCoupon]}>
+                    <Text style={[styles.menuBadgeText, softBadge && styles.menuBadgeTextCoupon]}>
                       {item.badge}
                     </Text>
                   </View>
@@ -205,6 +266,53 @@ export default function MyPageScreen({ navigation }) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* 휴대폰 번호 등록/변경 — 아이디(이메일) 찾기의 본인확인 인자 */}
+      <Modal visible={phoneVisible} transparent animationType="slide" onRequestClose={() => setPhoneVisible(false)}>
+        <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => setPhoneVisible(false)} />
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>휴대폰 번호</Text>
+            <Text style={styles.sheetSub}>아이디(이메일)를 잊었을 때 이름과 함께 본인 확인에 사용해요.</Text>
+            <TextInput
+              style={styles.sheetInput}
+              value={phoneInput}
+              onChangeText={t => setPhoneInput(api.formatPhone(t))}
+              placeholder="010-1234-5678"
+              placeholderTextColor={colors.mediumGray}
+              keyboardType="number-pad"
+              maxLength={13}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={savePhone}
+            />
+            <Text style={[styles.sheetHelp, phoneInput.trim() && !phoneCheck.ok && { color: colors.alertRed }]}>
+              {phoneInput.trim() && !phoneCheck.ok
+                ? phoneCheck.message
+                : '판매자에게 공개되지 않으며, 마케팅 연락에 사용하지 않습니다.'}
+            </Text>
+            <View style={styles.sheetBtns}>
+              <TouchableOpacity style={styles.sheetCancel} onPress={() => setPhoneVisible(false)} disabled={phoneSaving}>
+                <Text style={styles.sheetCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.sheetSave, (!phoneCheck.ok || phoneSaving) && { opacity: 0.6 }]}
+                onPress={savePhone}
+                disabled={!phoneCheck.ok || phoneSaving}
+              >
+                {phoneSaving
+                  ? <ActivityIndicator color={colors.white} />
+                  : <Text style={styles.sheetSaveText}>저장</Text>}
+              </TouchableOpacity>
+            </View>
+            {!!phone && (
+              <TouchableOpacity style={styles.sheetDelete} onPress={confirmClearPhone} disabled={phoneSaving}>
+                <Text style={styles.sheetDeleteText}>등록된 번호 삭제</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -266,4 +374,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14, alignItems: 'center', justifyContent: 'center',
   },
   sheetSaveText: { fontSize: 15, fontWeight: '700', color: colors.white },
+  sheetDelete: { alignItems: 'center', paddingVertical: 14, marginTop: 4 },
+  sheetDeleteText: { fontSize: 13, fontWeight: '600', color: colors.alertRed },
 });

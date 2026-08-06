@@ -13,12 +13,14 @@ import { getCurrentCoords, reverseGeocode } from '../lib/location';
 import DaumPostcodeModal from '../components/DaumPostcodeModal';
 
 // 최초 로그인 온보딩 — App.js Gate 가 nickname 미설정 계정에만 띄운다.
-// 저장 순서에 주의: 닉네임을 supabase.auth.updateUser 로 저장하는 순간 USER_UPDATED 가 발생해
-// Gate 가 이 화면을 내려버린다. 그래서 닉네임은 '맨 마지막'에 저장하고, 주소는 그 전에 처리한다.
-const TOTAL_STEPS = 2;
+// ★ 저장 순서에 주의: 닉네임을 supabase.auth.updateUser 로 저장하는 순간 USER_UPDATED 가 발생해
+//   Gate 가 이 화면을 내려버린다. 그래서 닉네임은 '맨 마지막'에 저장하고,
+//   휴대폰·주소는 반드시 그 전에 처리한다.
+const TOTAL_STEPS = 3;
 const STEP_META = {
   1: { title: '닉네임을 정해주세요', sub: '주문하면 판매자에게 이 이름이 보여요' },
-  2: { title: '자주 가는 주소', sub: '가까운 매장을 먼저 보여드릴게요' },
+  2: { title: '휴대폰 번호', sub: '아이디(이메일)를 잊었을 때 본인 확인에 사용해요' },
+  3: { title: '자주 가는 주소', sub: '가까운 매장을 먼저 보여드릴게요' },
 };
 
 export default function ProfileSetupScreen() {
@@ -36,7 +38,13 @@ export default function ProfileSetupScreen() {
   const check = api.validateNickname(nickname);
   const nicknameTouched = nickname.trim().length > 0;
 
-  // Step 2 — 주소(선택)
+  // Step 2 — 휴대폰(선택). 아이디 찾기의 본인확인 인자로만 쓰인다.
+  // 개인정보처리방침(TermsScreen)이 이미 '연락처(휴대폰 번호)'를 수집 항목으로 고지하고 있다.
+  const [phone, setPhone] = useState('');
+  const phoneCheck = api.validatePhone(phone);
+  const phoneTouched = phone.trim().length > 0;
+
+  // Step 3 — 주소(선택)
   const [postcodeVisible, setPostcodeVisible] = useState(false);
   const [address, setAddress] = useState('');
   const [label, setLabel] = useState('');
@@ -63,6 +71,18 @@ export default function ProfileSetupScreen() {
     if (!check.ok) { setStep(1); Alert.alert('닉네임 확인', check.message); return; }
     setSubmitting(true);
     try {
+      // ★ 휴대폰 → 주소 → 닉네임 순서를 지킬 것.
+      //   닉네임을 먼저 저장하면 USER_UPDATED 로 이 화면이 내려가 나머지가 저장되지 않는다.
+      if (phoneCheck.ok) {
+        try {
+          await api.setMyPhone(phoneCheck.value);
+        } catch (e) {
+          Alert.alert('휴대폰 저장 실패', e.message || '잠시 후 다시 시도해주세요.');
+          setStep(2);
+          setSubmitting(false);
+          return;
+        }
+      }
       if (withAddress && address.trim()) {
         await handleAddAddress({ label: label.trim() || '우리집', icon: 'pin', address: address.trim() });
       }
@@ -127,6 +147,34 @@ export default function ProfileSetupScreen() {
 
           {step === 2 && (
             <>
+              <Text style={styles.label}>휴대폰 번호</Text>
+              <TextInput
+                style={styles.input}
+                value={phone}
+                onChangeText={t => setPhone(api.formatPhone(t))}
+                placeholder="010-1234-5678"
+                placeholderTextColor={colors.mediumGray}
+                keyboardType="number-pad"
+                maxLength={13}
+                returnKeyType="done"
+              />
+              <Text style={[styles.help, phoneTouched && !phoneCheck.ok && styles.helpError]}>
+                {phoneTouched && !phoneCheck.ok
+                  ? phoneCheck.message
+                  : '입력하지 않아도 가입은 완료돼요. 마이페이지에서 언제든 등록할 수 있어요.'}
+              </Text>
+              <View style={styles.infoBox}>
+                <Text style={styles.infoText}>
+                  · 이메일(아이디)을 잊었을 때 이름 + 휴대폰 번호로 찾을 수 있어요.{'\n'}
+                  · 판매자에게는 공개되지 않습니다.{'\n'}
+                  · 마케팅 연락에 사용하지 않습니다.
+                </Text>
+              </View>
+            </>
+          )}
+
+          {step === 3 && (
+            <>
               <TouchableOpacity style={styles.gpsBtn} onPress={handleUseCurrentLocation} disabled={locating}>
                 <Navigation2 size={18} color={locating ? colors.mediumGray : colors.primaryGreen} />
                 <Text style={styles.gpsBtnText}>{locating ? '위치 찾는 중…' : '현재 위치로 찾기'}</Text>
@@ -169,6 +217,20 @@ export default function ProfileSetupScreen() {
             >
               <Text style={styles.primaryBtnText}>다음</Text>
             </TouchableOpacity>
+          ) : step === 2 ? (
+            <>
+              {/* 형식이 틀린 번호로 넘어가면 조용히 미저장되므로 다음 버튼을 막는다. */}
+              <TouchableOpacity
+                style={[styles.primaryBtn, phoneTouched && !phoneCheck.ok && styles.primaryBtnDisabled]}
+                onPress={() => setStep(3)}
+                disabled={phoneTouched && !phoneCheck.ok}
+              >
+                <Text style={styles.primaryBtnText}>다음</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.skipBtn} onPress={() => { setPhone(''); setStep(3); }}>
+                <Text style={styles.skipBtnText}>나중에 하기</Text>
+              </TouchableOpacity>
+            </>
           ) : (
             <>
               <TouchableOpacity

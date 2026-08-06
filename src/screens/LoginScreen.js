@@ -75,9 +75,20 @@ export default function LoginScreen({ navigation }) {
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>로그인</Text>}
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => navigation.navigate('SignUp')} style={{ alignItems: 'center', paddingVertical: 16 }}>
+          <TouchableOpacity onPress={() => navigation.navigate('SignUp')} style={{ alignItems: 'center', paddingVertical: 14 }}>
             <Text style={{ color: colors.mediumGray, fontSize: 14 }}>계정이 없으신가요? <Text style={{ color: colors.primaryGreen, fontWeight: '700' }}>회원가입</Text></Text>
           </TouchableOpacity>
+
+          {/* 아이디 = 가입하신 이메일 주소. 찾기는 본인확인 후 마스킹된 이메일만 알려준다. */}
+          <View style={styles.findRow}>
+            <TouchableOpacity onPress={() => navigation.navigate('FindId')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.findLink}>아이디 찾기</Text>
+            </TouchableOpacity>
+            <Text style={styles.findDot}>·</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('FindPassword')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.findLink}>비밀번호 찾기</Text>
+            </TouchableOpacity>
+          </View>
 
           {/* 구분선 */}
           <View style={styles.divider}>
@@ -128,6 +139,10 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   label: { fontSize: 13, color: '#6B7280', marginBottom: 6, fontWeight: '600' },
   input: { backgroundColor: colors.softGray, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, color: colors.charcoalBlack, marginBottom: 16 },
+
+  findRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingBottom: 20 },
+  findLink: { fontSize: 13, color: '#6B7280', fontWeight: '600' },
+  findDot: { fontSize: 13, color: '#D1D5DB' },
 
   divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
   dividerLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },

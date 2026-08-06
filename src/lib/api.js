@@ -564,6 +564,76 @@ export async function setMyNickname(nickname) {
   return v.value;
 }
 
+// ───────── 휴대폰 번호 (아이디 찾기 본인확인용) ─────────
+// 구매자 휴대폰은 public.buyer_contacts 에 저장한다(20260807000000_find_email.sql).
+// 쓰기는 set_my_phone RPC 전용 — 정규화·형식 검증을 서버가 강제해야 하므로 직접 INSERT 는 막혀 있다.
+// SMS 인증 수단이 없으므로 이 번호는 '자기신고값'이며, 소유 증명이 아니라 지식 요소로 쓴다.
+// 개인정보처리방침(TermsScreen)은 이미 '연락처(휴대폰 번호)'를 수집 항목으로 고지하고 있다.
+
+// 숫자만 남긴다 — 서버의 normalize_phone() 과 같은 규칙.
+export function normalizePhone(raw) {
+  return String(raw ?? '').replace(/[^0-9]/g, '');
+}
+// 표시용: '01012345678' → '010-1234-5678'
+export function formatPhone(raw) {
+  const d = normalizePhone(raw);
+  if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return d;
+}
+// 서버 CHECK(^01[0-9]{8,9}$) 와 같은 규칙 — 화면 실시간 안내에도 쓴다.
+export function validatePhone(raw) {
+  const value = normalizePhone(raw);
+  if (!/^01[0-9]{8,9}$/.test(value)) {
+    return { ok: false, value, message: '휴대폰 번호를 정확히 입력해주세요. (예: 010-1234-5678)' };
+  }
+  return { ok: true, value, message: '' };
+}
+
+// 휴대폰/아이디찾기 RPC 는 대문자 상수로 예외를 던진다 → 사용자 문구로 변환.
+function phoneLookupError(e) {
+  const m = (e && e.message) || '';
+  if (m.includes('LOOKUP_RATE_LIMIT')) return new Error('조회 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.');
+  if (m.includes('PHONE_INVALID'))     return new Error('휴대폰 번호를 정확히 입력해주세요.');
+  if (m.includes('INVALID_INPUT'))     return new Error('입력값을 다시 확인해주세요.');
+  if (m.includes('not authenticated')) return new Error('로그인이 필요합니다.');
+  return new Error(m || '처리 중 오류가 발생했습니다.');
+}
+
+// 등록된 내 휴대폰(정규화된 숫자열). 미등록이면 null.
+// RLS buyer_contacts_owner_select 로 본인 행만 보인다.
+export async function fetchMyPhone() {
+  const { data, error } = await supabase.from('buyer_contacts').select('phone_norm').maybeSingle();
+  if (error) throw error;
+  return (data && data.phone_norm) || null;
+}
+// 등록/변경. 반환값은 서버가 확정한 정규화 번호.
+export async function setMyPhone(phone) {
+  const v = validatePhone(phone);
+  if (!v.ok) throw new Error(v.message);
+  const { data, error } = await supabase.rpc('set_my_phone', { p_phone: v.value });
+  if (error) throw phoneLookupError(error);
+  return data;
+}
+export async function clearMyPhone() {
+  const { error } = await supabase.rpc('clear_my_phone');
+  if (error) throw phoneLookupError(error);
+}
+
+// ───────── 아이디(이메일) 찾기 ─────────
+// '아이디' = 로그인 이메일. 이름+휴대폰이 일치하면 '마스킹된' 이메일(ab****@gmail.com)만 돌려준다.
+// 전체 이메일을 주면 이름+번호만으로 타인 계정을 수집할 수 있다(계정 열거).
+// ★ 일치하는 계정이 없으면 예외가 아니라 null 이 온다 — 화면은 존재 여부를 암시하지 않는
+//   단일 문구('일치하는 계정이 없습니다')로만 안내해야 한다.
+export async function findMyEmail(name, phone) {
+  const { data, error } = await supabase.rpc('find_email_by_buyer', {
+    p_name: String(name ?? '').trim(),
+    p_phone: normalizePhone(phone),
+  });
+  if (error) throw phoneLookupError(error);
+  return data || null;
+}
+
 // ───────── 회원 탈퇴 ─────────
 export async function deleteMyAccount() {
   const { error } = await supabase.rpc('delete_my_account');

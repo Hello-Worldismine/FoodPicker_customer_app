@@ -34,6 +34,7 @@ import AddressEditScreen from '../screens/AddressEditScreen';
 import AddressDetailScreen from '../screens/AddressDetailScreen';
 import PaymentMethodScreen from '../screens/PaymentMethodScreen';
 import LinkedAccountsScreen from '../screens/LinkedAccountsScreen';
+import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
 import SupportScreen from '../screens/SupportScreen';
 import FAQScreen from '../screens/FAQScreen';
@@ -116,6 +117,7 @@ export default function AppNavigator() {
         <Stack.Screen name="AddressDetail" component={AddressDetailScreen} />
         <Stack.Screen name="PaymentMethod" component={PaymentMethodScreen} />
         <Stack.Screen name="LinkedAccounts" component={LinkedAccountsScreen} />
+        <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
         <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
         <Stack.Screen name="Support" component={SupportScreen} />
         <Stack.Screen name="FAQ" component={FAQScreen} />
