@@ -11,10 +11,10 @@ const CHANNELS = [
   {
     Icon: MessageSquare,
     label: '1:1 문의',
-    desc: '답변까지 1~2일 소요',
+    desc: '문의 내역 확인 및 작성',
     badge: null,
-    // 관리자 웹 신고/문의관리(reports)와 연동된 앱 내 문의 작성 화면으로 이동
-    screen: 'Inquiry',
+    // 관리자 웹 신고/문의관리(reports)와 연동된 문의 내역 화면(작성은 그 안의 버튼으로 이동)
+    screen: 'InquiryList',
   },
   {
     Icon: Mail,

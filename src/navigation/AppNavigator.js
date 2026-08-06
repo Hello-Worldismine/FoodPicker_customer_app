@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet, Platform } from 'react-native';
@@ -38,9 +38,14 @@ import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
 import SupportScreen from '../screens/SupportScreen';
 import FAQScreen from '../screens/FAQScreen';
 import InquiryScreen from '../screens/InquiryScreen';
+import InquiryListScreen from '../screens/InquiryListScreen';
+import InquiryDetailScreen from '../screens/InquiryDetailScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+
+// 푸시 알림 탭(딥링크) 시 컴포넌트 트리 밖(App.js)에서 화면을 이동시키기 위한 참조.
+export const navigationRef = createNavigationContainerRef();
 
 function TabBarIcon({ Icon, focused, label }) {
   return (
@@ -90,7 +95,7 @@ function MainTabs() {
 
 export default function AppNavigator() {
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="MainTabs" component={MainTabs} />
         <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
@@ -115,6 +120,8 @@ export default function AppNavigator() {
         <Stack.Screen name="Support" component={SupportScreen} />
         <Stack.Screen name="FAQ" component={FAQScreen} />
         <Stack.Screen name="Inquiry" component={InquiryScreen} />
+        <Stack.Screen name="InquiryList" component={InquiryListScreen} />
+        <Stack.Screen name="InquiryDetail" component={InquiryDetailScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

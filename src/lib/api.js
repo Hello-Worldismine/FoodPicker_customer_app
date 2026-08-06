@@ -166,7 +166,10 @@ function mapAddress(r) {
 }
 
 function mapNotification(r) {
-  return { id: r.id, type: r.type, title: r.title, message: r.message, read: r.is_read, createdAt: r.created_at };
+  return {
+    id: r.id, type: r.type, title: r.title, message: r.message, read: r.is_read, createdAt: r.created_at,
+    referenceType: r.reference_type ?? null, referenceId: r.reference_id ?? null,
+  };
 }
 
 // ───────── 찜 집합 ─────────
@@ -647,6 +650,40 @@ export async function createInquiry(type, title, content, orderCode = null) {
   }
   if (error) throw error;
   return { id: data.id, receiptCode: data.receipt_code };
+}
+
+// 내 문의 내역 — my_reports 뷰(20260716 마이그레이션, reporter_id=본인 행만 RLS 로 노출).
+// 관리자 웹 ReportStatus 와 동일한 DB 값(received/checking/awaiting_seller/awaiting_buyer/refunded/closed).
+export async function fetchMyInquiries() {
+  const { data, error } = await supabase
+    .from('my_reports').select('*').order('received_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(row => ({
+    id: row.id,
+    receiptCode: row.receipt_code,
+    type: row.type,
+    title: row.title,
+    content: row.content,
+    status: row.status,
+    storeName: row.store_name ?? '',
+    orderCode: row.order_code ?? null,
+    receivedAt: row.received_at,
+  }));
+}
+
+// 문의 답변 이력 — report_logs 중 kind='reply' 만 (RLS: report_logs_reporter_select, 본인 문의 건 한정).
+// 관리자 웹이 답변 등록 시 메시지 앞에 붙이는 "답변 등록: " 접두어는 노출용으로 제거한다.
+export async function fetchInquiryReplies(reportId) {
+  const { data, error } = await supabase
+    .from('report_logs').select('id, message, created_at')
+    .eq('report_id', reportId).eq('kind', 'reply')
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(row => ({
+    id: row.id,
+    message: (row.message || '').replace(/^답변 등록:\s*/, ''),
+    createdAt: row.created_at,
+  }));
 }
 
 // ───────── 배너 (관리자 웹에서 관리 — banners 테이블, 20260716 마이그레이션) ─────────

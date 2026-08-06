@@ -1,17 +1,19 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Heart, Megaphone, ShoppingBag, MapPin, TrendingDown } from 'lucide-react-native';
+import { ArrowLeft, Heart, Megaphone, ShoppingBag, MapPin, TrendingDown, MessageSquare } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useApp } from '../context/AppContext';
 
-// buyer_notifications.type(order/review/coupon/price/system) → 아이콘/라벨
+// buyer_notifications.type(order/review/coupon/price/system/inquiry_reply) → 아이콘/라벨
+// inquiry_reply 는 20260806_report_reply_notification 마이그레이션(백엔드 적용 필요)이 생성.
 const NOTIF_TYPES = {
   order:  { Icon: ShoppingBag,  iconBg: '#EEF2FF', iconColor: '#4F46E5', label: '주문' },
   review: { Icon: Megaphone,    iconBg: colors.freshMint, iconColor: colors.primaryGreen, label: '리뷰' },
   coupon: { Icon: Heart,        iconBg: '#FFF0F0', iconColor: '#E53E3E', label: '쿠폰' },
   price:  { Icon: TrendingDown, iconBg: '#FFF0F0', iconColor: colors.alertRed, label: '가격' },
   system: { Icon: MapPin,       iconBg: '#FFF8E6', iconColor: colors.warmOrange, label: '안내' },
+  inquiry_reply: { Icon: MessageSquare, iconBg: colors.freshMint, iconColor: colors.primaryGreen, label: '문의' },
 };
 
 function formatTime(iso) {
@@ -70,7 +72,13 @@ export default function NotificationScreen({ navigation }) {
               const Icon = typeInfo.Icon;
               return (
                 <TouchableOpacity key={notif.id} activeOpacity={0.85}
-                  onPress={() => !notif.read && markNotificationRead(notif.id)}
+                  onPress={() => {
+                    if (!notif.read) markNotificationRead(notif.id);
+                    // 문의 답변 알림 탭 → 문의 상세로 딥링크(reference_id = reports.id)
+                    if (notif.referenceType === 'report' && notif.referenceId) {
+                      navigation.navigate('InquiryDetail', { reportId: notif.referenceId });
+                    }
+                  }}
                   style={[styles.notifCard, !notif.read && styles.notifCardUnread]}>
                   <View style={[styles.notifIcon, { backgroundColor: typeInfo.iconBg }]}>
                     <Icon size={20} color={typeInfo.iconColor} />

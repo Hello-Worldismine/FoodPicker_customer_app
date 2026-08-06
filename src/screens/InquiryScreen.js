@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
@@ -30,6 +31,9 @@ export default function InquiryScreen({ navigation }) {
   const [content, setContent] = useState('');
   const [orderCode, setOrderCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const scrollRef = useRef(null);
+  // 내용 입력칸이 화면 중하단이라 포커스 시 키보드에 가려짐 — 포커스되면 하단까지 스크롤해 노출.
+  const scrollToBottom = () => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
 
   const canSubmit = !!type && title.trim().length > 0 && content.trim().length > 0;
 
@@ -71,7 +75,12 @@ export default function InquiryScreen({ navigation }) {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+      >
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
         {/* 문의 유형 */}
         <View style={styles.card}>
@@ -111,6 +120,7 @@ export default function InquiryScreen({ navigation }) {
           <TextInput
             value={content}
             onChangeText={v => setContent(v.slice(0, MAX_CONTENT))}
+            onFocus={scrollToBottom}
             placeholder={'문의 내용을 자세히 적어주시면\n더 빠르고 정확한 답변이 가능해요.'}
             placeholderTextColor={colors.mediumGray}
             multiline
@@ -145,6 +155,7 @@ export default function InquiryScreen({ navigation }) {
         </TouchableOpacity>
         <Text style={styles.submitGuide}>접수된 문의는 고객센터 운영 시간 내에 순차적으로 답변드려요</Text>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
