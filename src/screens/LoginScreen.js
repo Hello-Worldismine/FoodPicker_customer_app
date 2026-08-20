@@ -56,7 +56,7 @@ export default function LoginScreen({ navigation }) {
   return (
     <View style={{ flex: 1, backgroundColor: colors.white }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 28, paddingTop: insets.top + 40 }} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 28, paddingTop: insets.top + 40, paddingBottom: insets.bottom + 28 }} keyboardShouldPersistTaps="handled">
           <View style={{ alignItems: 'center', marginBottom: 36 }}>
             <Image source={require('../../assets/icon_consumer.png')} style={{ width: 80, height: 80, resizeMode: 'contain' }} />
             <Text style={{ fontSize: 28, fontWeight: '800', color: colors.primaryGreen, marginTop: 8 }}>푸드피커</Text>
