@@ -312,7 +312,7 @@ export default function StoreScreen({ route, navigation }) {
                 <TouchableOpacity
                   style={[styles.mapPlaceholder, { alignItems: 'center', justifyContent: 'center' }]}
                   activeOpacity={0.85}
-                  onPress={() => openInMaps({ address: store.address, label: store.name })}
+                  onPress={() => openInMaps({ lat: store.lat, lng: store.lng, address: store.address, label: store.name })}
                 >
                   <MapGrid />
                   <View style={{ zIndex: 1, alignItems: 'center' }}>

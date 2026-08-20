@@ -221,7 +221,7 @@ export default function ProductDetailScreen({ route, navigation }) {
             <TouchableOpacity
               style={styles.mapPlaceholder}
               activeOpacity={0.85}
-              onPress={() => openInMaps({ address: product.pickupAddress, label: product.store })}
+              onPress={() => openInMaps({ lat: product.lat, lng: product.lng, address: product.pickupAddress, label: product.store })}
             >
               <MapGrid />
               <View style={{ zIndex: 1, alignItems: 'center' }}>

@@ -206,7 +206,15 @@ export default function OrderHistoryScreen({ navigation, route }) {
                     </View>
                     <TouchableOpacity
                       style={styles.navBtn}
-                      onPress={() => openDirections({ address: order.storeAddress, label: order.store })}
+                      onPress={() => {
+                        // orders 에는 좌표 컬럼이 없다. 매장 목록에서 좌표를 찾아 넘겨야
+                        // 네이버지도가 '검색'이 아닌 실제 목적지 길찾기로 열린다.
+                        const s = order.storeId ? stores.find(v => v.id === order.storeId) : null;
+                        openDirections({
+                          lat: s?.lat, lng: s?.lng,
+                          address: order.storeAddress, label: order.store,
+                        });
+                      }}
                     >
                       <Navigation size={13} color={colors.primaryGreen} />
                       <Text style={styles.navBtnText}>길찾기</Text>
@@ -227,7 +235,10 @@ export default function OrderHistoryScreen({ navigation, route }) {
                         <TouchableOpacity
                           style={styles.mapPlaceholder}
                           activeOpacity={0.9}
-                          onPress={() => openInMaps({ address: order.storeAddress, label: order.store })}
+                          onPress={() => openInMaps({
+                            lat: s.lat, lng: s.lng,
+                            address: order.storeAddress, label: order.store,
+                          })}
                         >
                           <NaverMap
                             lat={s.lat}

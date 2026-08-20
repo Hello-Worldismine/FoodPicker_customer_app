@@ -23,7 +23,11 @@
         "NSLocationWhenInUseUsageDescription": "주변 매장과 상품을 찾기 위해 위치 정보를 사용합니다.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "주변 매장 알림을 위해 위치 정보를 사용합니다.",
         "NSPhotoLibraryUsageDescription": "리뷰 사진 첨부를 위해 사진 라이브러리 접근이 필요합니다.",
-        "NSCameraUsageDescription": "리뷰 사진 촬영을 위해 카메라 접근이 필요합니다."
+        "NSCameraUsageDescription": "리뷰 사진 촬영을 위해 카메라 접근이 필요합니다.",
+        "LSApplicationQueriesSchemes": [
+          "navermap",
+          "nmap"
+        ]
       }
     },
     "android": {
