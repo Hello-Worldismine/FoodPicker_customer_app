@@ -14,13 +14,6 @@ import { useAuth } from '../context/AuthContext';
 import * as api from '../lib/api';
 import { deleteMyAccount } from '../lib/api';
 
-// TODO: GET /api/users/me/stats 로 교체 (환경 기여 통계)
-const ENV_STATS = [
-  { label: '구한 음식', value: '12개' },
-  { label: '예상 절감', value: '38,000원' },
-  { label: '폐기 감소', value: '4.2kg' },
-];
-
 export default function MyPageScreen({ navigation }) {
   const { orders, coupons, likedStores } = useApp();
   const { user, signOut } = useAuth();
@@ -60,6 +53,17 @@ export default function MyPageScreen({ navigation }) {
   const [phoneInput, setPhoneInput] = useState('');
   const [phoneSaving, setPhoneSaving] = useState(false);
   const phoneCheck = api.validatePhone(phoneInput);
+
+  // 환경 기여 통계 — 서버 집계(my_env_stats). 하드코딩 목데이터를 실제 주문 기준으로 교체했다.
+  // 절감액 = Σ(정가×수량 − 실결제액) 누적. 'kg(폐기 감소)' 타일은 산출 기준이 없어 제거했다.
+  const [envStats, setEnvStats] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    api.fetchMyEnvStats()
+      .then(v => { if (alive) setEnvStats(v); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [orders]);   // 주문이 바뀌면(신규 결제·취소) 다시 집계
 
   useEffect(() => {
     let alive = true;
@@ -173,16 +177,24 @@ export default function MyPageScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* 환경 기여 통계 */}
-          <View style={styles.envStats}>
-            {ENV_STATS.map(s => (
-              <View key={s.label} style={styles.envStat}>
-                <Text style={styles.envStatValue}>{s.value}</Text>
-                <Text style={styles.envStatLabel}>{s.label}</Text>
+          {/* 환경 기여 통계 — 조회 실패(구 DB) 시에는 아예 감춘다(가짜 수치를 보여주지 않는다) */}
+          {envStats && (
+            <>
+              <View style={styles.envStats}>
+                <View style={styles.envStat}>
+                  <Text style={styles.envStatValue}>{envStats.savedCount}개</Text>
+                  <Text style={styles.envStatLabel}>구한 음식</Text>
+                </View>
+                <View style={styles.envStat}>
+                  <Text style={styles.envStatValue}>
+                    {envStats.savedAmount.toLocaleString()}원
+                  </Text>
+                  <Text style={styles.envStatLabel}>예상 절감</Text>
+                </View>
               </View>
-            ))}
-          </View>
-          <Text style={styles.envNote}>* 수치는 예상값입니다</Text>
+              <Text style={styles.envNote}>* 정가 대비 절감액 누적입니다</Text>
+            </>
+          )}
         </View>
 
         {/* 메뉴 */}

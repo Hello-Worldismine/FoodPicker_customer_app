@@ -602,6 +602,25 @@ function phoneLookupError(e) {
 
 // 등록된 내 휴대폰(정규화된 숫자열). 미등록이면 null.
 // RLS buyer_contacts_owner_select 로 본인 행만 보인다.
+// 마이페이지 '환경 기여 통계' — 서버 집계(my_env_stats RPC).
+// 절감액 = Σ(정가×수량 − 실결제액). 정가는 orders 에 스냅샷이 없어 서버가 products 를 조인해 읽는다
+// (products 는 구매자 RLS 로 못 읽으므로 앱에서 계산할 수 없다 — 20260820010000 마이그레이션).
+// 마이그레이션 미적용 DB 에서도 화면이 깨지지 않게, 실패하면 null 을 돌려주고 호출부가 감춘다.
+export async function fetchMyEnvStats() {
+  const { data, error } = await supabase.rpc('my_env_stats');
+  if (error) {
+    console.warn('[마이페이지] 환경 통계 조회 실패:', error.message);
+    return null;
+  }
+  // returns table(...) 이라 배열 1행으로 온다.
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return { savedCount: 0, savedAmount: 0 };
+  return {
+    savedCount: Number(row.saved_count) || 0,
+    savedAmount: Number(row.saved_amount) || 0,
+  };
+}
+
 export async function fetchMyPhone() {
   const { data, error } = await supabase.from('buyer_contacts').select('phone_norm').maybeSingle();
   if (error) throw error;
