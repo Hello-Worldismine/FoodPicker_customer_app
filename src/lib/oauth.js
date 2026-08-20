@@ -34,6 +34,13 @@ export const PROVIDER_LABEL = {
 
 const NAVER_AUTHORIZE_URL = 'https://nid.naver.com/oauth2.0/authorize';
 
+// 네이버 개발자센터의 'Callback URL' 은 http(s) 만 받는다 — 커스텀 스킴(foodpicker://)은
+// 등록 자체가 거부된다. 그래서 네이버에는 아래 Edge Function 의 https 주소를 등록하고,
+// 그 함수가 code/state 를 앱 딥링크로 302 중계한다(supabase/functions/naver-callback).
+// 구글·카카오는 Supabase 의 https 콜백을 쓰므로 이 우회가 필요 없다.
+const NAVER_CALLBACK_URL =
+  `${(process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '')}/functions/v1/naver-callback`;
+
 // 로그인 취소를 나타내는 sentinel — 호출부에서 Alert 를 띄우지 않고 조용히 종료한다.
 export const OAUTH_CANCELLED = 'OAUTH_CANCELLED';
 
@@ -180,13 +187,14 @@ export async function signInWithNaver() {
   if (!clientId) {
     throw new Error('네이버 로그인이 아직 준비되지 않았습니다. (EXPO_PUBLIC_NAVER_CLIENT_ID 미설정)');
   }
-  const redirectTo = redirectUrl();
   const state = randomState();
 
+  // 네이버에 넘기는 redirect_uri 는 https 중계 함수, 인앱 브라우저가 가로챌 주소는 앱 스킴이다.
+  // (중계 함수가 마지막에 foodpicker://auth-callback 으로 302 시킨다 — openAuth 가 그걸 받는다)
   const authUrl =
     `${NAVER_AUTHORIZE_URL}?response_type=code` +
     `&client_id=${encodeURIComponent(clientId)}` +
-    `&redirect_uri=${encodeURIComponent(redirectTo)}` +
+    `&redirect_uri=${encodeURIComponent(NAVER_CALLBACK_URL)}` +
     `&state=${encodeURIComponent(state)}`;
 
   const callbackUrl = await openAuth(authUrl);
@@ -205,7 +213,7 @@ export async function signInWithNaver() {
 
   // Edge Function 이 네이버 토큰 교환 + 프로필 조회 + (없으면) 회원 생성까지 처리한다.
   const { data, error } = await supabase.functions.invoke('naver-login', {
-    body: { code: params.code, state, redirectUri: redirectTo },
+    body: { code: params.code, state, redirectUri: NAVER_CALLBACK_URL },
   });
   if (error) {
     // FunctionsHttpError(4xx/5xx) 는 응답 본문을 context 에 담고 있어 서버 메시지를 꺼내 쓴다.
