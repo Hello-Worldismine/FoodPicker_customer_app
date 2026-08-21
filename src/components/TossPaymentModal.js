@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   StyleSheet,
   Linking,
+  Alert,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -35,11 +37,60 @@ function parseQuery(url) {
   return params;
 }
 
-// 안드로이드 intent:// URL → 앱스킴 URL (intent://path#Intent;scheme=foo;...;end → foo://path)
-function intentToScheme(url) {
-  const scheme = (url.match(/scheme=([^;]+)/) || [])[1];
-  if (!scheme) return null;
-  return `${scheme}://${url.replace(/^intent:\/\//, '').split('#Intent')[0]}`;
+// 안드로이드 intent:// URL 파서.
+//   intent://path?query#Intent;scheme=foo;package=com.bar;S.browser_fallback_url=https%3A%2F%2F…;end
+// 이전 구현은 scheme 만 뽑아 재조립하고 package / browser_fallback_url 을 버렸다.
+// 카드사 앱 호출이 실패했을 때 되돌아갈 곳이 사라져 '눌러도 아무 일도 안 일어나는' 원인이 된다.
+function parseIntentUrl(url) {
+  const body = url.replace(/^intent:\/\//, '');
+  const [path, tail = ''] = body.split('#Intent');
+  const pick = (re) => (tail.match(re) || [])[1] || null;
+  const scheme = pick(/(?:^|;)scheme=([^;]+)/);
+  const pkg = pick(/(?:^|;)package=([^;]+)/);
+  const rawFallback = pick(/(?:^|;)S\.browser_fallback_url=([^;]+)/);
+  let fallback = null;
+  if (rawFallback) {
+    try { fallback = decodeURIComponent(rawFallback); } catch (e) { fallback = rawFallback; }
+  }
+  return {
+    schemeUrl: scheme ? `${scheme}://${path}` : null,
+    packageName: pkg,
+    fallbackUrl: fallback,
+  };
+}
+
+// 카드사/은행 앱 실행. 후보를 순서대로 시도하고, 전부 실패하면 사용자에게 알린다.
+// (실패를 조용히 삼키면 '앱카드 실행' 을 눌러도 화면에 아무 변화가 없어 원인을 알 수 없다)
+async function openExternalApp(rawUrl) {
+  const isIntent = rawUrl.startsWith('intent:');
+  const { schemeUrl, packageName, fallbackUrl } = isIntent
+    ? parseIntentUrl(rawUrl)
+    : { schemeUrl: rawUrl, packageName: null, fallbackUrl: null };
+
+  const candidates = [];
+  if (schemeUrl) candidates.push(schemeUrl);
+  // 안드로이드는 intent: URI 자체를 처리할 수 있는 경우가 있어 원본도 후보로 남긴다.
+  if (isIntent && Platform.OS === 'android') candidates.push(rawUrl);
+  if (fallbackUrl) candidates.push(fallbackUrl);
+  // 앱 미설치 대비 — 스토어로 보낸다.
+  if (packageName) {
+    candidates.push(`market://details?id=${packageName}`);
+    candidates.push(`https://play.google.com/store/apps/details?id=${packageName}`);
+  }
+
+  for (const candidate of candidates) {
+    try {
+      await Linking.openURL(candidate);
+      return true;
+    } catch (e) {
+      console.warn('[toss] 외부 앱 실행 실패:', candidate, e && e.message);
+    }
+  }
+  Alert.alert(
+    '카드사 앱을 열 수 없습니다',
+    '카드사 앱이 설치되어 있는지 확인해주세요. 설치되어 있다면 다른 결제수단을 이용해주세요.',
+  );
+  return false;
 }
 
 // 인라인 <script> 에 값을 안전하게 주입 — JSON.stringify 만으로는 '</script>' 가
@@ -159,6 +210,21 @@ export default function TossPaymentModal({
     fn();
   }
 
+  // 외부 앱 실행 중복 방지 — 같은 URL 이 shouldStartLoad / navigationStateChange / onError
+  // 여러 경로로 동시에 들어와도 카드사 앱이 두 번 뜨지 않게 한다.
+  const externalRef = React.useRef({ url: null, at: 0 });
+  function tryOpenExternal(rawUrl) {
+    const url = rawUrl || '';
+    // http(s)·about:blank·data: 는 웹뷰가 그대로 처리해야 한다.
+    if (!url || /^(https?|about|data|blob):/.test(url)) return false;
+    const now = Date.now();
+    if (externalRef.current.url === url && now - externalRef.current.at < 3000) return true;
+    externalRef.current = { url, at: now };
+    console.log('[toss] 외부 앱 호출:', url);
+    openExternalApp(url);
+    return true;
+  }
+
   // SDK 스크립트 로드 실패 / requestPayment 자체 실패(리다이렉트 이전 오류)
   function handleMessage(event) {
     try {
@@ -187,13 +253,23 @@ export default function TossPaymentModal({
       fireOnce(() => onFail && onFail(q.message || '결제에 실패했습니다.', q.code));
       return false;
     }
-    // 카드사/은행 앱 등 외부 스킴 → 외부 앱 실행 시도(실패는 무시), 웹뷰 로드는 차단
-    if (!/^https?:\/\//.test(url)) {
-      const target = url.startsWith('intent:') ? (intentToScheme(url) || url) : url;
-      Linking.openURL(target).catch(() => {});
-      return false;
-    }
+    // 카드사/은행 앱 등 외부 스킴 → 외부 앱 실행, 웹뷰 로드는 차단
+    if (tryOpenExternal(url)) return false;
     return true;
+  }
+
+  // 안드로이드 WebView 는 커스텀 스킴을 onShouldStartLoadWithRequest 로 넘기지 않고
+  // 곧바로 ERR_UNKNOWN_URL_SCHEME 오류로 떨어뜨리는 경우가 있다(카드사 페이지가 iframe·
+  // window.open 으로 앱을 호출할 때 특히). 그러면 '앱카드 실행' 을 눌러도 아무 일도
+  // 일어나지 않는다 — 아래 두 경로를 보조 그물로 깔아 어느 쪽으로 들어와도 앱을 연다.
+  function handleNavigationStateChange(navState) {
+    tryOpenExternal(navState && navState.url);
+  }
+
+  function handleError(syntheticEvent) {
+    const e = (syntheticEvent && syntheticEvent.nativeEvent) || {};
+    if (tryOpenExternal(e.url)) return;
+    console.warn('[toss] WebView 오류:', e.code, e.description, e.url);
   }
 
   return (
@@ -209,10 +285,16 @@ export default function TossPaymentModal({
           source={{ html, baseUrl: 'https://foodpicker.app' }}
           onMessage={handleMessage}
           onShouldStartLoadWithRequest={handleShouldStartLoad}
+          onNavigationStateChange={handleNavigationStateChange}
+          onError={handleError}
           originWhitelist={['*']}
           javaScriptEnabled
           domStorageEnabled
           mixedContentMode="always"
+          // 카드사 페이지가 window.open 으로 앱을 호출하는 경우가 있다.
+          // multipleWindows=false 와 함께 두면 새 창 대신 같은 웹뷰 내비게이션으로 들어와
+          // onShouldStartLoadWithRequest 가 URL 을 볼 수 있다.
+          javaScriptCanOpenWindowsAutomatically
           setSupportMultipleWindows={false}
           startInLoadingState
           renderLoading={() => (
